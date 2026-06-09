@@ -71,13 +71,21 @@ export function buildSpecLabel(product) {
   ].join('\n')
 }
 
-export function buildImagePrompt(type, product) {
+export function buildImagePrompt(type, product, sellingPoints = '') {
   const name = product.name || '【品名】'
   const colors = product.colors.length > 0 ? product.colors.join('/') : '【顏色】'
 
   switch (type) {
-    case 'main':
-      return '以我上傳的實拍照片為準，保持商品的真實外觀、材質、顏色完全不變。只做：去背，換成純白到淺灰乾淨漸層背景，柔和棚拍打光，商品置中佔畫面約75%，無文字無浮水印，正方形1:1電商主圖。不得修改、重畫或美化商品本體。'
+    case 'main': {
+      const base =
+        '以我上傳的實拍照片為準，保持商品的真實外觀、材質、顏色完全不變，並完整保留商品上的品牌 logo、商標與任何印刷文字，絕對不得移除、塗改、淡化或重畫。只做：去背，換成乾淨的純白到淺灰漸層背景；柔和棚拍打光，並在商品底部加一道自然柔和陰影，確保白色或淺色商品與背景有清楚對比、邊緣清晰、不會糊進背景消失；商品完整置中、佔畫面約75%；正方形1:1電商主圖。不得修改、重畫或美化商品本體。'
+      if (!sellingPoints.trim()) return base
+      return (
+        base +
+        '\n\n另外，請在不遮擋商品與 logo 的留白區（畫面上方或下方），用清楚專業的電商排版加入以下繁體中文賣點文字，字體乾淨易讀、必須是正確無錯字的繁體中文：\n' +
+        sellingPoints.trim()
+      )
+    }
     case 'option':
       return `以我上傳的${colors}實拍照片為準，商品外觀與顏色完全保留。去背，純白背景，正方形1:1，電商選項展示用。不得更動商品顏色。`
     case 'scene':
