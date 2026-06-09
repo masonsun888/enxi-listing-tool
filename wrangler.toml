@@ -1,7 +1,11 @@
 name = "enxi-listing-tool"
 compatibility_date = "2025-01-01"
 
-# 純靜態網站：把 vite build 產出的 dist 當作靜態資源部署，不需要 Worker script。
+# 純前端靜態網站：由 wrangler 在部署前自己跑 build，再把 dist 當靜態資源部署，
+# 不依賴 Cloudflare 後台是否有設定 build command（避免 dist 不存在導致部署失敗）。
+[build]
+command = "npm install && npm run build"
+
 [assets]
 directory = "./dist"
 not_found_handling = "single-page-application"

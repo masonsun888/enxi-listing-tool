@@ -1,21 +1,31 @@
 import { useState } from 'react'
 import ResultBox from './ResultBox.jsx'
-import { IMAGE_TYPES, buildImagePrompt, buildSpecLabel } from '../prompts.js'
+import {
+  IMAGE_TYPES,
+  buildImagePrompt,
+  buildSpecLabel,
+  PEARL_BRAND,
+  LOCKNLOCK_BRAND,
+} from '../prompts.js'
 
 // 分頁3：製圖
 export default function ImageTab({ product }) {
   const [type, setType] = useState('main')
   const [result, setResult] = useState('')
   const [sellingPoints, setSellingPoints] = useState('')
+  const [mainTitle, setMainTitle] = useState('')
 
   const isSpec = type === 'spec'
   const isMain = type === 'main'
+  const isPearl = product.brand === PEARL_BRAND
+  // 白牌／其他品牌主圖走「爆款設計」版型；珍珠金屬／樂扣走乾淨實拍圖。
+  const usesBaoKuan = product.brand !== PEARL_BRAND && product.brand !== LOCKNLOCK_BRAND
 
   function generate() {
     if (type === 'spec') {
       setResult(buildSpecLabel(product))
     } else {
-      setResult(buildImagePrompt(type, product, sellingPoints))
+      setResult(buildImagePrompt(type, product, { sellingPoints, mainTitle }))
     }
   }
 
@@ -52,7 +62,15 @@ export default function ImageTab({ product }) {
         </div>
       )}
 
-      {isMain && (
+      {/* 珍珠金屬：所有 AI 圖都要放 logo，提醒員工一併上傳 logo 圖 */}
+      {!isSpec && isPearl && (
+        <div className="mt-4 rounded-2xl border-2 border-sky-300 bg-sky-50 p-4 text-base font-semibold text-sky-800">
+          🏷️ 珍珠金屬：貼指令到 GPT 時，請「連同商品實拍照 + 珍珠金屬 logo 圖」一起上傳，指令會請 AI 把 logo 放到圖上。
+        </div>
+      )}
+
+      {/* 主圖：珍珠金屬／樂扣 → 賣點文字；白牌／其他 → 爆款主標題 */}
+      {isMain && !usesBaoKuan && (
         <div className="mt-4">
           <label className="mb-1 block text-base font-bold text-slate-700">
             主圖賣點文字（選填，一行一個）
@@ -70,6 +88,24 @@ export default function ImageTab({ product }) {
         </div>
       )}
 
+      {isMain && usesBaoKuan && (
+        <div className="mt-4">
+          <label className="mb-1 block text-base font-bold text-slate-700">
+            主圖主標題（爆款大字，建議填）
+          </label>
+          <input
+            type="text"
+            value={mainTitle}
+            onChange={(e) => setMainTitle(e.target.value)}
+            placeholder="例：大容量保溫瓶"
+            className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
+          />
+          <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
+            ⚠️ 白牌走「爆款設計圖」版型：請另外上傳一張你喜歡的版型參考圖給 GPT，AI 畫的中文字一樣要逐字核對。
+          </p>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={generate}
@@ -78,7 +114,7 @@ export default function ImageTab({ product }) {
         {isSpec ? '產生規格文字標籤' : '產生製圖指令'}
       </button>
 
-      <ResultBox value={result} rows={isSpec ? 5 : 8} />
+      <ResultBox value={result} rows={isSpec ? 5 : 12} />
     </div>
   )
 }
