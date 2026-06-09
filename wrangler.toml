@@ -1,0 +1,7 @@
+name = "enxi-listing-tool"
+compatibility_date = "2025-01-01"
+
+# 純靜態網站：把 vite build 產出的 dist 當作靜態資源部署，不需要 Worker script。
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
