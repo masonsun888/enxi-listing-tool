@@ -71,10 +71,10 @@ export default function ImageTab({ product }) {
         </div>
       )}
 
-      {/* 樂扣樂扣主圖：純品牌字置頂，不用 logo */}
+      {/* 樂扣樂扣主圖：官方旗艦店乾淨白底風 */}
       {isMain && isLocknlock && (
         <div className="mt-4 rounded-2xl border-2 border-sky-300 bg-sky-50 p-4 text-base font-semibold text-sky-800">
-          🏷️ 樂扣樂扣：品牌名會以「標準字」放在標題最上方，不使用 logo 圖、不必上傳 logo。
+          🏷️ 樂扣樂扣＝官方旗艦店風（乾淨白底、專業棚拍）。主標題/副標題/賣點都「選填」，留空則產生最乾淨的官方目錄圖；不使用 logo 圖、不必上傳。
         </div>
       )}
 

@@ -177,6 +177,28 @@ ${subLine}‧ 賣點小標：用 2–3 個「明顯小於主標題」的精簡 i
 ${points}`
 }
 
+// 樂扣樂扣 主圖：官方旗艦店／momo 目錄風（乾淨白底、專業棚拍、文字極簡）。
+function buildLocknlockOfficialPrompt(product, { sellingPoints = '', mainTitle = '', subTitle = '' } = {}) {
+  const texts = []
+  if (mainTitle.trim()) texts.push(`主標題：${mainTitle.trim()}`)
+  if (subTitle.trim()) texts.push(`副標題：${subTitle.trim()}`)
+  if (sellingPoints.trim())
+    texts.push(`賣點（最多 2–3 個小字）：${sellingPoints.trim().replace(/\n/g, '、')}`)
+
+  const textBlock =
+    texts.length > 0
+      ? `\n\n【文字｜選配，保持官方乾淨感】只加入以下我指定的文字，用簡約細緻的標準字（小而精緻、絕非花俏泡泡字），放在上方或下方留白處，不可遮擋商品、不可喧賓奪主，繁體中文正確無錯字：\n${texts.join('\n')}`
+      : '\n\n【文字】預設不放任何行銷文案，維持官方目錄的乾淨俐落感。'
+
+  return `以我上傳的實拍照片為準，做成「樂扣樂扣 LocknLock 官方旗艦店風格」的乾淨電商主圖（參考 momo 官方賣場目錄圖：簡約、專業、白底）。
+
+【整體風格】乾淨的官方目錄風：純白或極淺灰的無縫背景、明亮柔和的棚拍打光、商品底部加一道自然柔和陰影讓邊緣清晰（白色或淺色商品也要看得出輪廓、不會糊進白背景）。不要彩色背景、不要花俏裝飾、不要泡泡字、不要雜亂貼紙與促銷標。
+
+【商品本體】完整保留真實外觀、材質、顏色與商品上原有的標誌；允許基礎調色與簡單修圖（曝光、白平衡、偏色、雜訊、輕微刮痕與反光）讓賣相乾淨專業，但不得改變造型與真實顏色識別。商品完整置中、佔畫面約 70–80%，正方形 1:1。若為多色或套組，可像官方一樣把商品整齊並排、乾淨呈現。
+
+【品牌】在畫面上方放上乾淨的「樂扣樂扣 LocknLock」標準字（純文字、不使用 logo 圖案），低調、專業、有官方信任感。${textBlock}`
+}
+
 // opts = { sellingPoints, mainTitle, subTitle }
 export function buildImagePrompt(type, product, opts = {}) {
   const { sellingPoints = '', mainTitle = '', subTitle = '' } = opts
@@ -186,9 +208,10 @@ export function buildImagePrompt(type, product, opts = {}) {
 
   switch (type) {
     case 'main':
-      return usesBaoKuan
-        ? buildBaoKuanMainPrompt(product, { mainTitle, subTitle })
-        : buildCleanMainPrompt(product, { sellingPoints, mainTitle, subTitle })
+      if (usesBaoKuan) return buildBaoKuanMainPrompt(product, { mainTitle, subTitle })
+      if (product.brand === LOCKNLOCK_BRAND)
+        return buildLocknlockOfficialPrompt(product, { sellingPoints, mainTitle, subTitle })
+      return buildCleanMainPrompt(product, { sellingPoints, mainTitle, subTitle })
     case 'option':
       return (
         `以我上傳的${colors}實拍照片為準，商品外觀與顏色完全保留。去背，純白背景，正方形1:1，電商選項展示用。不得更動商品顏色。` +
