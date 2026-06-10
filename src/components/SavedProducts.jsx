@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { makeDefaultProduct } from '../defaults.js'
 
 const KEY = 'enxi_saved_products'
+const API = '/api/products'
 
-function loadSaved() {
+function loadLocal() {
   try {
     const v = JSON.parse(localStorage.getItem(KEY))
     return Array.isArray(v) ? v : []
@@ -13,50 +14,115 @@ function loadSaved() {
 }
 
 function fmtDate(ts) {
+  if (!ts) return ''
   const d = new Date(ts)
   const p = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-// 商品儲存：存到瀏覽器本機，方便日後載入微調、追蹤哪些商品已做過。
+function upsert(list, rec) {
+  const without = list.filter((s) => s.id !== rec.id)
+  return [rec, ...without].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+}
+
+// 雲端 API：失敗時丟錯，呼叫端會退回本機模式。
+async function apiList() {
+  const r = await fetch(API, { headers: { accept: 'application/json' } })
+  if (!r.ok) throw new Error('api unavailable')
+  const ct = r.headers.get('content-type') || ''
+  if (!ct.includes('application/json')) throw new Error('not json')
+  return (await r.json()).products || []
+}
+async function apiSave(record) {
+  const r = await fetch(API, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(record),
+  })
+  if (!r.ok) throw new Error('save failed')
+  return (await r.json()).product
+}
+async function apiDelete(id) {
+  const r = await fetch(`${API}/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!r.ok) throw new Error('delete failed')
+}
+
+// 商品儲存：優先用雲端（多人共用、跨裝置）；雲端未連線時自動退回本機暫存。
 export default function SavedProducts({ product, setProduct, currentId, setCurrentId }) {
-  const [saved, setSaved] = useState(loadSaved)
+  const [saved, setSaved] = useState([])
+  const [mode, setMode] = useState('loading') // loading | cloud | local
   const [open, setOpen] = useState(false)
   const [flash, setFlash] = useState('')
+  const [busy, setBusy] = useState(false)
 
+  // 開啟時先試雲端，失敗就退回本機。
   useEffect(() => {
+    let alive = true
+    apiList()
+      .then((products) => {
+        if (!alive) return
+        setSaved(products)
+        setMode('cloud')
+      })
+      .catch(() => {
+        if (!alive) return
+        setSaved(loadLocal())
+        setMode('local')
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // 本機鏡像：兩種模式都把清單寫進 localStorage（離線時也看得到上次的資料）。
+  useEffect(() => {
+    if (mode === 'loading') return
     localStorage.setItem(KEY, JSON.stringify(saved))
-  }, [saved])
+  }, [saved, mode])
 
   function notify(msg) {
     setFlash(msg)
-    setTimeout(() => setFlash(''), 1800)
+    setTimeout(() => setFlash(''), 2000)
   }
 
-  function saveCurrent() {
+  async function saveCurrent() {
     if (!product.name.trim()) {
       notify('請先填品名再儲存')
       return
     }
-    const now = Date.now()
-    const data = {
+    const prev = saved.find((s) => s.id === currentId)
+    const record = {
+      id: currentId || undefined,
       brand: product.brand,
       name: product.name,
       size: product.size,
       material: product.material,
       colors: product.colors,
+      note: prev ? prev.note || '' : '',
+      updatedAt: Date.now(),
     }
-    if (currentId && saved.some((s) => s.id === currentId)) {
-      setSaved((list) =>
-        list.map((s) => (s.id === currentId ? { ...s, ...data, updatedAt: now } : s)),
-      )
-      notify('已更新此商品')
-    } else {
-      const id = String(now)
-      setSaved((list) => [{ id, note: '', ...data, updatedAt: now }, ...list])
-      setCurrentId(id)
-      notify('已儲存新商品')
+
+    if (mode === 'cloud') {
+      setBusy(true)
+      try {
+        const result = await apiSave(record)
+        setSaved((list) => upsert(list, result))
+        setCurrentId(result.id)
+        notify(currentId ? '已更新（雲端）' : '已儲存（雲端）')
+        setOpen(true)
+        return
+      } catch {
+        setMode('local')
+        notify('雲端連線失敗，改存本機')
+      } finally {
+        setBusy(false)
+      }
     }
+
+    const rec = { ...record, id: currentId || String(Date.now()) }
+    setSaved((list) => upsert(list, rec))
+    setCurrentId(rec.id)
+    notify(currentId ? '已更新（本機）' : '已儲存（本機）')
     setOpen(true)
   }
 
@@ -73,13 +139,27 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  function remove(id) {
+  async function remove(id) {
+    if (mode === 'cloud') {
+      try {
+        await apiDelete(id)
+      } catch {
+        notify('雲端刪除失敗')
+        return
+      }
+    }
     setSaved((list) => list.filter((s) => s.id !== id))
     if (currentId === id) setCurrentId(null)
   }
 
-  function updateNote(id, note) {
+  function setNoteLocal(id, note) {
     setSaved((list) => list.map((s) => (s.id === id ? { ...s, note } : s)))
+  }
+
+  function commitNote(id) {
+    if (mode !== 'cloud') return
+    const item = saved.find((s) => s.id === id)
+    if (item) apiSave(item).catch(() => {})
   }
 
   function newProduct() {
@@ -95,7 +175,8 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
         <button
           type="button"
           onClick={saveCurrent}
-          className="rounded-xl bg-teal-600 py-3 text-lg font-bold text-white active:scale-[0.97]"
+          disabled={busy}
+          className="rounded-xl bg-teal-600 py-3 text-lg font-bold text-white active:scale-[0.97] disabled:opacity-50"
         >
           💾 儲存此商品
         </button>
@@ -121,7 +202,10 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
 
       {open && (
         <div className="mt-2 space-y-2">
-          {saved.length === 0 && (
+          {mode === 'loading' && (
+            <p className="px-1 py-3 text-center text-sm text-slate-400">讀取中…</p>
+          )}
+          {mode !== 'loading' && saved.length === 0 && (
             <p className="px-1 py-3 text-center text-sm text-slate-400">
               還沒有存任何商品。填好資料後按「儲存此商品」。
             </p>
@@ -163,7 +247,8 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
               <input
                 type="text"
                 value={item.note || ''}
-                onChange={(e) => updateNote(item.id, e.target.value)}
+                onChange={(e) => setNoteLocal(item.id, e.target.value)}
+                onBlur={() => commitNote(item.id)}
                 placeholder="進度備註，例：已上架 / 待產圖"
                 className="mt-2 w-full rounded-lg border-2 border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-teal-500 focus:outline-none"
               />
@@ -173,7 +258,9 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
       )}
 
       <p className="mt-3 text-center text-xs text-slate-400">
-        ※ 資料存在這支手機/瀏覽器本機，換裝置或清除瀏覽器資料會不見。
+        {mode === 'cloud'
+          ? '☁️ 雲端同步中：多人共用、換裝置也看得到。'
+          : '📴 本機暫存中（雲端未連線）：資料只在這支手機。'}
       </p>
     </section>
   )
