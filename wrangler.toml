@@ -13,9 +13,7 @@ binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
-# 雲端商品儲存（共用）：在 Cloudflare 後台建立一個 KV namespace，
-# 把它的 id 填到下面 id="" 裡，重新部署後就會啟用雲端同步。
-# 在 id 還沒填好之前，先把這三行維持註解，前端會自動用「本機暫存」。
-# [[kv_namespaces]]
-# binding = "PRODUCTS"
-# id = ""
+# 雲端商品儲存（共用）：KV namespace 綁定為 PRODUCTS。
+[[kv_namespaces]]
+binding = "PRODUCTS"
+id = "af6fb945695b441f8613afbca2673151"
