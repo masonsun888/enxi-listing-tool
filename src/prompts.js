@@ -43,39 +43,36 @@ export function buildTitlePrompt(product, competitorTitles) {
   ].join('\n')
 }
 
-// 分頁2：內文（權重內文 + 活潑長內文）
-const BODY_SYSTEM_PROMPT = `你是蝦皮商品文案優化助手。請依據我提供的「真實商品資料」，產出下面兩個區塊的內容。
+// 分頁2：內文（直接輸出可貼給客人的成品內文）
+const BODY_SYSTEM_PROMPT = `你是蝦皮商品文案優化助手。請依據我提供的「真實商品資料」，產出「直接可以貼給客人看」的商品內文。
 
 【硬規則】
-- 商品的規格、容量、尺寸、材質、功能，只能使用我提供的真實資料，禁止編造或誇大。
-- 我沒提供的數字或規格，一律不要寫，不准自己腦補。
+- 商品的規格、容量、尺寸、材質、功能，只能使用我提供的真實資料，禁止編造或誇大；我沒提供的就不要寫。
 - 語氣像人話、活潑親切，可適度用 emoji，但不要硬堆關鍵字。
+- 重要：輸出是要直接貼給客人看的成品。**絕對不要出現任何給內部看的字眼或括號標註**，例如不要寫「權重內文」「搜尋用」「爆款文案」「區塊一／二」「風格參考」「(這段給內部)」等。客人看到的只能是乾淨的商品介紹本身。
 
-─── 區塊一：權重內文（蝦皮搜尋用）───
-產出一段 80–150 字的商品內文：
-- 前 30 字內自然帶入 2–3 個核心搜尋關鍵字。
-- 結尾一句簡短行動呼籲。
-- 總字數嚴格 ≤ 150 字。
+請依序輸出以下內容（標題就用下面這幾個中文小標即可，不要再加其他內部註解）：
 
-─── 區塊二：賣場活潑長內文 ───
-請依商品自動判讀「使用情境與痛點」，產出（精簡、活潑、好讀）：
-1.「痛點 → 解決」情境短文 2–3 段，每段用一個 emoji 開頭：先點出使用者的煩惱，再帶出本商品如何解決（只能根據真實賣點，不可編造功能）。
-2.【商品規格】用條列整理我提供的材質 / 容量 / 尺寸 / 顏色等真實資料（我沒給的項目就不要列）。
-3. 三個賣場注意事項小區塊，用親切口吻精簡改寫（這三段屬通用賣場條款，可保留）：
-   ・【現貨即時補】台灣現貨、出貨前人工檢查、物流受損會負責處理。
-   ・【開箱請錄影】請錄影開箱，方便數量／顏色／款式問題快速處理。
-   ・【小公差說明】工藝商品可能有微小尺寸誤差與螢幕色差，完美主義者請斟酌下單。
-4. 最後給 6–10 個適合本商品的蝦皮 hashtag（以 # 開頭，涵蓋品類、材質、容量、使用情境關鍵字）。
+【商品介紹】
+先一段 80–150 字的商品介紹，前 30 字內自然帶入 2–3 個核心關鍵字，結尾一句行動呼籲。
 
-風格參考（僅供語氣與排版參考，實際內容請全部換成本商品的真實資料）：
-😩 每天都要跑好幾趟飲水機補水，工作節奏一直被打斷⋯這款大容量直接幫你省下補水時間，裝滿一次撐到下班！
+接著是「痛點 → 解決」情境短文 2–3 段，每段用一個 emoji 開頭：先點出使用者的煩惱，再帶出本商品如何解決（只能根據真實賣點）。
+
 【商品規格】
-・材質：316 不鏽鋼
-・容量：1200ml
-【現貨即時補】台灣現貨，出貨前兩次人工檢查，運送受損我們負責到底。
-#大容量保溫瓶 #316不鏽鋼 #辦公室必備
+用條列整理我提供的材質 / 容量 / 尺寸 / 顏色等真實資料（我沒給的項目就不要列）。
 
-輸出：直接給文案，不要額外解釋。`
+【購買須知】
+三個小段，用親切口吻精簡改寫：
+・現貨即時補：台灣現貨、出貨前人工檢查、物流受損會負責處理。
+・開箱請錄影：請錄影開箱，方便數量／顏色／款式問題快速處理。
+・小提醒：工藝商品可能有微小尺寸誤差與螢幕色差，完美主義者請斟酌下單。
+
+最後一行放 6–10 個 hashtag（以 # 開頭，涵蓋品類、材質、容量、使用情境）。
+
+語氣與排版可參考（內容請全部換成本商品真實資料）：
+😩 每天都要跑好幾趟飲水機補水，工作節奏一直被打斷⋯這款大容量直接幫你省下補水時間，裝滿一次撐到下班！
+
+輸出：只給上述成品內文，不要任何額外解釋或內部說明。`
 
 export function buildBodyPrompt(product) {
   return [BODY_SYSTEM_PROMPT, '', '【商品資料】', formatProduct(product)].join('\n')
@@ -89,10 +86,10 @@ export const IMAGE_TYPES = [
   { key: 'scene', label: '情境圖' },
 ]
 
-// 珍珠金屬：每一張 AI 圖都要放上品牌 logo。
+// 珍珠金屬：每一張 AI 圖都要放上品牌 logo（固定右上角）。
 function pearlLogoNote(brand) {
   if (brand !== PEARL_BRAND) return ''
-  return '\n本商品為「珍珠金屬（PEARL LIFE／パール金属）」品牌，請在圖片角落（建議左下或右下）放上我一併上傳的「珍珠金屬 PEARL LIFE」品牌 logo，logo 需清晰、比例自然、不變形、不可遮擋商品。'
+  return '\n本商品為「珍珠金屬（PEARL LIFE／パール金属）」品牌，我會另外提供一張品牌 logo 圖，請將「珍珠金屬 PEARL LIFE」logo 固定放在圖片「右上角」，清晰、比例自然、不變形、不可遮擋商品。'
 }
 
 // 規格圖不經 AI，回傳一段可複製的文字標籤供排版用。
@@ -105,8 +102,9 @@ export function buildSpecLabel(product) {
 }
 
 // 白牌（非珍珠金屬、非樂扣）主圖：蝦皮爆款風格的詳細設計指令。
-function buildBaoKuanMainPrompt(product, mainTitle) {
+function buildBaoKuanMainPrompt(product, { mainTitle = '', subTitle = '' } = {}) {
   const title = mainTitle.trim() || '【請填入主標題】'
+  const sub = subTitle.trim()
   return `【商品主圖設計 — 蝦皮／MOMO 爆款風格】
 
 請參考我另外提供的版型風格圖。只保留參考圖的「整體排版結構、視覺層級、字體風格、廣告氛圍、電商轉換邏輯」，不得直接複製參考商品，商品需完全換成我這次上傳的實拍商品。
@@ -117,8 +115,9 @@ ${formatProduct(product)}
 【輸入區】
 ・商品圖片：我上傳的實拍照（請完整保留真實外觀、材質、顏色，不得變形裁切）
 ・主標題：${title}
+・副標語：${sub || '（AI 依商品自動生成）'}
 
-【AI 自動分析】依商品自動判斷：商品類型、使用情境、材質特色、核心痛點、主要賣點、目標客群，並自動生成：副標語、情境文案、功能文案、Callout 標題。
+【AI 自動分析】依商品自動判斷：商品類型、使用情境、材質特色、核心痛點、主要賣點、目標客群，並自動生成：${sub ? '情境文案、功能文案、Callout 標題（副標語用我上面指定的）' : '副標語、情境文案、功能文案、Callout 標題'}。
 
 【版面結構】
 ・主商品：置於畫面右側，佔 60~70%，完整呈現、不裁切、不變形、高解析、真實質感。
@@ -138,8 +137,9 @@ ${formatProduct(product)}
 }
 
 // 珍珠金屬 / 樂扣樂扣 主圖：品牌信任感的高質感商品圖（品牌置頂＋色彩學背景＋精緻藝術字）。
-function buildCleanMainPrompt(product, { sellingPoints = '', mainTitle = '' } = {}) {
+function buildCleanMainPrompt(product, { sellingPoints = '', mainTitle = '', subTitle = '' } = {}) {
   const title = mainTitle.trim() || '（請依商品特性自動生成一句吸睛的短主標題）'
+  const sub = subTitle.trim()
   const points = sellingPoints.trim() || '（請依商品特性自動生成 2–3 個賣點）'
 
   // 品牌呈現：樂扣樂扣＝純標準字置頂（不使用 logo）；珍珠金屬＝上傳的 logo 放右上角。
@@ -149,10 +149,14 @@ function buildCleanMainPrompt(product, { sellingPoints = '', mainTitle = '' } = 
       '在畫面「最上方、主標題的上面」放上「樂扣樂扣」品牌名，用乾淨專業的標準字（不是廉價泡泡字）。樂扣樂扣不使用任何 logo 圖案，純文字呈現即可，一眼可見、建立品牌信任感。'
   } else if (product.brand === PEARL_BRAND) {
     brandTop =
-      '在畫面「右上角」放上我一併上傳的「珍珠金屬 PEARL LIFE」品牌 logo，清晰、比例自然、不變形、不遮擋商品，建立品牌信任感。'
+      '我會提供商品主圖素材 + 一張品牌 logo 圖。請把「珍珠金屬 PEARL LIFE」logo 固定放在畫面「右上角」，清晰、比例自然、不變形、不遮擋商品，建立品牌信任感。'
   } else {
     brandTop = '在畫面最上方、主標題之上，放上清楚專業的品牌標誌字樣。'
   }
+
+  const subLine = sub
+    ? `‧ 副標題：放在主標題正下方，字級中等（明顯小於主標題、但大於賣點小標），與主標題風格一致：\n${sub}\n`
+    : ''
 
   return `以我上傳的實拍照片為準，做成「有品牌信任感」的高質感電商主圖。
 
@@ -169,13 +173,13 @@ function buildCleanMainPrompt(product, { sellingPoints = '', mainTitle = '' } = 
 【文字｜全部繁體中文、必須正確無錯字、精緻品牌級字體（非廉價泡泡字）、需有清楚大小階層】
 ‧ 主標題：放畫面上方、不與品牌標誌重疊，字級最大、最醒目：
 ${title}
-‧ 賣點小標：用 2–3 個「明顯小於主標題」的精簡 icon callout 呈現，風格統一、分散在留白區、不可遮擋商品、不可大過主標題：
+${subLine}‧ 賣點小標：用 2–3 個「明顯小於主標題」的精簡 icon callout 呈現，風格統一、分散在留白區、不可遮擋商品、不可大過主標題：
 ${points}`
 }
 
-// opts = { sellingPoints, mainTitle }
+// opts = { sellingPoints, mainTitle, subTitle }
 export function buildImagePrompt(type, product, opts = {}) {
-  const { sellingPoints = '', mainTitle = '' } = opts
+  const { sellingPoints = '', mainTitle = '', subTitle = '' } = opts
   const name = product.name || '【品名】'
   const colors = product.colors.length > 0 ? product.colors.join('/') : '【顏色】'
   const usesBaoKuan = product.brand !== PEARL_BRAND && product.brand !== LOCKNLOCK_BRAND
@@ -183,8 +187,8 @@ export function buildImagePrompt(type, product, opts = {}) {
   switch (type) {
     case 'main':
       return usesBaoKuan
-        ? buildBaoKuanMainPrompt(product, mainTitle)
-        : buildCleanMainPrompt(product, { sellingPoints, mainTitle })
+        ? buildBaoKuanMainPrompt(product, { mainTitle, subTitle })
+        : buildCleanMainPrompt(product, { sellingPoints, mainTitle, subTitle })
     case 'option':
       return (
         `以我上傳的${colors}實拍照片為準，商品外觀與顏色完全保留。去背，純白背景，正方形1:1，電商選項展示用。不得更動商品顏色。` +

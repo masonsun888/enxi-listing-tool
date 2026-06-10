@@ -4,6 +4,7 @@ import SavedProducts from './components/SavedProducts.jsx'
 import TitleTab from './components/TitleTab.jsx'
 import BodyTab from './components/BodyTab.jsx'
 import ImageTab from './components/ImageTab.jsx'
+import PriceTab from './components/PriceTab.jsx'
 import Footer from './components/Footer.jsx'
 import { makeDefaultProduct } from './defaults.js'
 
@@ -11,6 +12,7 @@ const TABS = [
   { key: 'title', label: '標題' },
   { key: 'body', label: '內文' },
   { key: 'image', label: '製圖' },
+  { key: 'price', label: '定價' },
 ]
 
 export default function App() {
@@ -35,7 +37,7 @@ export default function App() {
       />
 
       {/* 分頁切換 */}
-      <nav className="sticky top-0 z-10 mt-5 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 py-2">
+      <nav className="sticky top-0 z-10 mt-5 grid grid-cols-4 gap-2 rounded-2xl bg-slate-100 py-2">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -56,6 +58,7 @@ export default function App() {
         {tab === 'title' && <TitleTab product={product} />}
         {tab === 'body' && <BodyTab product={product} />}
         {tab === 'image' && <ImageTab product={product} />}
+        {tab === 'price' && <PriceTab product={product} />}
       </main>
 
       <Footer />

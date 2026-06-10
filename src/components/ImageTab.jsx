@@ -14,6 +14,7 @@ export default function ImageTab({ product }) {
   const [result, setResult] = useState('')
   const [sellingPoints, setSellingPoints] = useState('')
   const [mainTitle, setMainTitle] = useState('')
+  const [subTitle, setSubTitle] = useState('')
 
   const isSpec = type === 'spec'
   const isMain = type === 'main'
@@ -26,7 +27,7 @@ export default function ImageTab({ product }) {
     if (type === 'spec') {
       setResult(buildSpecLabel(product))
     } else {
-      setResult(buildImagePrompt(type, product, { sellingPoints, mainTitle }))
+      setResult(buildImagePrompt(type, product, { sellingPoints, mainTitle, subTitle }))
     }
   }
 
@@ -87,7 +88,22 @@ export default function ImageTab({ product }) {
             type="text"
             value={mainTitle}
             onChange={(e) => setMainTitle(e.target.value)}
-            placeholder="例：大容量保溫瓶"
+            placeholder="例：小貓保溫杯"
+            className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
+          />
+        </div>
+      )}
+
+      {isMain && (
+        <div className="mt-3">
+          <label className="mb-1 block text-base font-bold text-slate-700">
+            副標題（選填，放主標題下方的小標語）
+          </label>
+          <input
+            type="text"
+            value={subTitle}
+            onChange={(e) => setSubTitle(e.target.value)}
+            placeholder="例：一鍵彈蓋 保溫保冰"
             className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
           />
         </div>
