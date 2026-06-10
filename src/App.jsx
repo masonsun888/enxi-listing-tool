@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import ProductForm from './components/ProductForm.jsx'
+import SavedProducts from './components/SavedProducts.jsx'
 import TitleTab from './components/TitleTab.jsx'
 import BodyTab from './components/BodyTab.jsx'
 import ImageTab from './components/ImageTab.jsx'
 import Footer from './components/Footer.jsx'
+import { makeDefaultProduct } from './defaults.js'
 
 const TABS = [
   { key: 'title', label: '標題' },
@@ -12,13 +14,8 @@ const TABS = [
 ]
 
 export default function App() {
-  const [product, setProduct] = useState({
-    brand: '樂扣樂扣',
-    name: '樂扣樂扣',
-    size: '',
-    material: '不鏽鋼',
-    colors: [],
-  })
+  const [product, setProduct] = useState(makeDefaultProduct)
+  const [currentId, setCurrentId] = useState(null)
   const [tab, setTab] = useState('title')
 
   return (
@@ -29,6 +26,13 @@ export default function App() {
       </header>
 
       <ProductForm product={product} setProduct={setProduct} />
+
+      <SavedProducts
+        product={product}
+        setProduct={setProduct}
+        currentId={currentId}
+        setCurrentId={setCurrentId}
+      />
 
       {/* 分頁切換 */}
       <nav className="sticky top-0 z-10 mt-5 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 py-2">

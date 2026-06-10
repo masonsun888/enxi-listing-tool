@@ -66,14 +66,14 @@ export default function ImageTab({ product }) {
       {/* 珍珠金屬：所有 AI 圖都要放 logo，提醒員工一併上傳 logo 圖 */}
       {!isSpec && isPearl && (
         <div className="mt-4 rounded-2xl border-2 border-sky-300 bg-sky-50 p-4 text-base font-semibold text-sky-800">
-          🏷️ 珍珠金屬：貼指令到 GPT 時，請「連同商品實拍照 + 珍珠金屬 logo 圖」一起上傳，指令會請 AI 把 logo 放到圖上最上方。
+          🏷️ 珍珠金屬：貼指令到 GPT 時，請「連同商品實拍照 + 珍珠金屬 logo 圖」一起上傳，指令會請 AI 把 logo 放到圖片右上角。
         </div>
       )}
 
-      {/* 樂扣樂扣主圖：品牌字放最上方，想更精準可一併上傳 logo */}
+      {/* 樂扣樂扣主圖：純品牌字置頂，不用 logo */}
       {isMain && isLocknlock && (
         <div className="mt-4 rounded-2xl border-2 border-sky-300 bg-sky-50 p-4 text-base font-semibold text-sky-800">
-          🏷️ 樂扣樂扣：品牌字會放在標題最上方。想要 logo 更精準、更有信任感，可連同商品照一起上傳「樂扣樂扣 logo 圖」給 GPT。
+          🏷️ 樂扣樂扣：品牌名會以「標準字」放在標題最上方，不使用 logo 圖、不必上傳 logo。
         </div>
       )}
 
