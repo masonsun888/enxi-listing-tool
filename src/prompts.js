@@ -1,9 +1,9 @@
 // 品牌與材質選項（供 ProductForm 與 prompt 共用）
-export const BRANDS = ['樂扣', '珍珠金屬', '白牌']
+export const BRANDS = ['樂扣樂扣', '珍珠金屬', '白牌']
 export const MATERIALS = ['不鏽鋼', '鐵', 'PP塑膠', '塑膠', '塑料', '玻璃', '矽膠', '其他']
 
 export const PEARL_BRAND = '珍珠金屬'
-export const LOCKNLOCK_BRAND = '樂扣'
+export const LOCKNLOCK_BRAND = '樂扣樂扣'
 
 // 把商品基本資料整理成一段人類可讀的文字，塞進各個 prompt 裡。
 export function formatProduct(product) {
@@ -137,23 +137,33 @@ ${formatProduct(product)}
 【輸出要求】繁體中文、蝦皮爆款風格、MOMO 商品頁風格、高轉換率電商主圖、Commercial Advertising Design、Ultra Realistic Product Photography、1:1 Square、4K Ultra HD、商品絕對清晰、背景柔焦、真實攝影感。`
 }
 
-// 珍珠金屬 / 樂扣 主圖：乾淨真實商品圖（保留外觀，依品牌決定是否放 logo）。
-function buildCleanMainPrompt(product, sellingPoints) {
-  let base =
-    '以我上傳的實拍照片為準，保持商品的真實外觀、材質、顏色完全不變，並完整保留商品上原有的標誌與印刷文字，絕對不得移除、塗改、淡化或重畫。只做：去背，換成乾淨的純白到淺灰漸層背景；柔和棚拍打光，並在商品底部加一道自然柔和陰影，確保白色或淺色商品與背景有清楚對比、邊緣清晰、不會糊進背景消失；商品完整置中、佔畫面約75%；正方形1:1電商主圖。不得修改、重畫或美化商品本體。'
+// 珍珠金屬 / 樂扣樂扣 主圖：乾淨真實商品圖（保留外觀＋基礎修圖＋色彩學背景＋藝術字分層）。
+function buildCleanMainPrompt(product, { sellingPoints = '', mainTitle = '' } = {}) {
+  const title = mainTitle.trim() || '（請依商品特性自動生成一句吸睛的短主標題）'
+  const points = sellingPoints.trim() || '（請依商品特性自動生成 2–3 個賣點）'
 
-  if (product.brand === PEARL_BRAND) {
-    base += pearlLogoNote(product.brand)
-  } else if (product.brand === LOCKNLOCK_BRAND) {
-    base += '\n保留商品原樣即可，不需另外加上任何品牌 logo 或浮水印。'
+  // 品牌呈現：樂扣樂扣→圖上放小藝術字品牌名（不放 logo）；珍珠金屬→放上傳的 logo。
+  let brandLine = ''
+  if (product.brand === LOCKNLOCK_BRAND) {
+    brandLine =
+      '\n‧ 品牌字：在畫面角落用小型立體藝術字放上「樂扣樂扣」品牌名，明顯小於賣點小標，不放任何 logo 圖案、不可喧賓奪主。'
+  } else if (product.brand === PEARL_BRAND) {
+    brandLine = pearlLogoNote(product.brand)
   }
 
-  if (sellingPoints.trim()) {
-    base +=
-      '\n\n另外，請在不遮擋商品與標誌的留白區（畫面上方或下方），用清楚專業的電商排版加入以下繁體中文賣點文字，字體乾淨易讀、必須是正確無錯字的繁體中文：\n' +
-      sellingPoints.trim()
-  }
-  return base
+  return `以我上傳的實拍照片為準，做成高轉換率電商主圖。
+
+【商品本體】保留商品真實造型、材質、設計與商品上原有的標誌與印刷文字，不得移除、塗改或捏造不存在的特徵。允許做基礎調色與簡單修圖：修正曝光、白平衡、偏色、雜訊、輕微刮痕、髒污與反光，讓商品乾淨專業；但不可改變商品的真實顏色識別與造型。
+
+【背景】不要用純白背景。請依商品主色，用色彩學挑一個能凸顯商品、與商品有明顯對比的柔和背景色（白色或淺色商品請用低彩度的莫蘭迪色、淺灰藍、奶油、霧粉等中低明度色；可呼應商品上的點綴色）。柔和棚拍打光，商品底部加自然柔和陰影並保留邊緣高光，確保商品邊緣清晰、不會糊進背景。
+
+【構圖】商品完整置中、佔畫面約 70–80%，正方形 1:1。
+
+【文字｜全部繁體中文、必須正確無錯字、皆為立體藝術字（描邊＋陰影，可加柔和發光），需有清楚大小階層】
+‧ 主標題：放畫面上方或一側，字級最大、最醒目：
+${title}
+‧ 賣點小標：用 2–3 個「明顯小於主標題」的藝術字 callout（可加圓角底框或小 icon）呈現，分散在留白區、不可遮擋商品、不可大過主標題：
+${points}${brandLine}`
 }
 
 // opts = { sellingPoints, mainTitle }
@@ -167,7 +177,7 @@ export function buildImagePrompt(type, product, opts = {}) {
     case 'main':
       return usesBaoKuan
         ? buildBaoKuanMainPrompt(product, mainTitle)
-        : buildCleanMainPrompt(product, sellingPoints)
+        : buildCleanMainPrompt(product, { sellingPoints, mainTitle })
     case 'option':
       return (
         `以我上傳的${colors}實拍照片為準，商品外觀與顏色完全保留。去背，純白背景，正方形1:1，電商選項展示用。不得更動商品顏色。` +

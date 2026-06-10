@@ -69,17 +69,32 @@ export default function ImageTab({ product }) {
         </div>
       )}
 
-      {/* 主圖：珍珠金屬／樂扣 → 賣點文字；白牌／其他 → 爆款主標題 */}
-      {isMain && !usesBaoKuan && (
+      {/* 主圖：所有品牌都有主標題；珍珠金屬／樂扣樂扣 另有賣點小標 */}
+      {isMain && (
         <div className="mt-4">
           <label className="mb-1 block text-base font-bold text-slate-700">
-            主圖賣點文字（選填，一行一個）
+            主圖主標題（大藝術字，留空 AI 自動生成）
+          </label>
+          <input
+            type="text"
+            value={mainTitle}
+            onChange={(e) => setMainTitle(e.target.value)}
+            placeholder="例：大容量保溫瓶"
+            className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
+          />
+        </div>
+      )}
+
+      {isMain && !usesBaoKuan && (
+        <div className="mt-3">
+          <label className="mb-1 block text-base font-bold text-slate-700">
+            賣點小標（選填，一行一個，會排成比主標題小的藝術字）
           </label>
           <textarea
             rows={3}
             value={sellingPoints}
             onChange={(e) => setSellingPoints(e.target.value)}
-            placeholder={'例：\n316不鏽鋼\n大容量500ml\n24小時保溫'}
+            placeholder={'例：\n一鍵彈跳\n保溫保冰\n316不鏽鋼'}
             className="w-full resize-none rounded-xl border-2 border-slate-200 bg-white p-4 text-base text-slate-800 focus:border-teal-500 focus:outline-none"
           />
           <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
@@ -89,21 +104,9 @@ export default function ImageTab({ product }) {
       )}
 
       {isMain && usesBaoKuan && (
-        <div className="mt-4">
-          <label className="mb-1 block text-base font-bold text-slate-700">
-            主圖主標題（爆款大字，建議填）
-          </label>
-          <input
-            type="text"
-            value={mainTitle}
-            onChange={(e) => setMainTitle(e.target.value)}
-            placeholder="例：大容量保溫瓶"
-            className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
-          />
-          <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
-            ⚠️ 白牌走「爆款設計圖」版型：請另外上傳一張你喜歡的版型參考圖給 GPT，AI 畫的中文字一樣要逐字核對。
-          </p>
-        </div>
+        <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
+          ⚠️ 白牌走「爆款設計圖」版型：請另外上傳一張你喜歡的版型參考圖給 GPT，AI 畫的中文字一樣要逐字核對。
+        </p>
       )}
 
       <button

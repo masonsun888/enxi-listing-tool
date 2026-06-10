@@ -13,8 +13,8 @@ const TABS = [
 
 export default function App() {
   const [product, setProduct] = useState({
-    brand: '樂扣',
-    name: '樂扣',
+    brand: '樂扣樂扣',
+    name: '樂扣樂扣',
     size: '',
     material: '不鏽鋼',
     colors: [],
