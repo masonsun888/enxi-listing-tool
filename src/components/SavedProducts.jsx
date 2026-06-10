@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react'
-import { makeDefaultProduct } from '../defaults.js'
+import { useEffect, useRef, useState } from 'react'
+import { makeDefaultProduct, makeEmptyWork, makeEmptyDone } from '../defaults.js'
 
 const KEY = 'enxi_saved_products'
 const API = '/api/products'
+
+const STEPS = [
+  ['title', '標題'],
+  ['body', '內文'],
+  ['image', '圖'],
+  ['price', '定價'],
+  ['listed', '上架'],
+]
 
 function loadLocal() {
   try {
@@ -25,40 +33,55 @@ function upsert(list, rec) {
   return [rec, ...without].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
 }
 
+function authHeaders(password) {
+  return password ? { 'x-app-password': password } : {}
+}
+
 // 雲端 API：失敗時丟錯，呼叫端會退回本機模式。
-async function apiList() {
-  const r = await fetch(API, { headers: { accept: 'application/json' } })
+async function apiList(password) {
+  const r = await fetch(API, { headers: { accept: 'application/json', ...authHeaders(password) } })
   if (!r.ok) throw new Error('api unavailable')
   const ct = r.headers.get('content-type') || ''
   if (!ct.includes('application/json')) throw new Error('not json')
   return (await r.json()).products || []
 }
-async function apiSave(record) {
+async function apiSave(record, password) {
   const r = await fetch(API, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders(password) },
     body: JSON.stringify(record),
   })
   if (!r.ok) throw new Error('save failed')
   return (await r.json()).product
 }
-async function apiDelete(id) {
-  const r = await fetch(`${API}/${encodeURIComponent(id)}`, { method: 'DELETE' })
+async function apiDelete(id, password) {
+  const r = await fetch(`${API}/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(password),
+  })
   if (!r.ok) throw new Error('delete failed')
 }
 
 // 商品儲存：優先用雲端（多人共用、跨裝置）；雲端未連線時自動退回本機暫存。
-export default function SavedProducts({ product, setProduct, currentId, setCurrentId }) {
+export default function SavedProducts({
+  product,
+  setProduct,
+  work,
+  setWork,
+  currentId,
+  setCurrentId,
+  password,
+}) {
   const [saved, setSaved] = useState([])
   const [mode, setMode] = useState('loading') // loading | cloud | local
   const [open, setOpen] = useState(false)
   const [flash, setFlash] = useState('')
   const [busy, setBusy] = useState(false)
+  const fileRef = useRef(null)
 
-  // 開啟時先試雲端，失敗就退回本機。
   useEffect(() => {
     let alive = true
-    apiList()
+    apiList(password)
       .then((products) => {
         if (!alive) return
         setSaved(products)
@@ -72,7 +95,7 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
     return () => {
       alive = false
     }
-  }, [])
+  }, [password])
 
   // 本機鏡像：兩種模式都把清單寫進 localStorage（離線時也看得到上次的資料）。
   useEffect(() => {
@@ -82,7 +105,24 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
 
   function notify(msg) {
     setFlash(msg)
-    setTimeout(() => setFlash(''), 2000)
+    setTimeout(() => setFlash(''), 2200)
+  }
+
+  // 寫入一筆（雲端優先；雲端失敗則退本機）。回傳實際存下的紀錄。
+  async function persist(record) {
+    if (mode === 'cloud') {
+      try {
+        const result = await apiSave(record, password)
+        setSaved((list) => upsert(list, result))
+        return result
+      } catch {
+        setMode('local')
+        notify('雲端連線失敗，改存本機')
+      }
+    }
+    const rec = { ...record, id: record.id || String(Date.now()) }
+    setSaved((list) => upsert(list, rec))
+    return rec
   }
 
   async function saveCurrent() {
@@ -99,30 +139,15 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
       material: product.material,
       colors: product.colors,
       note: prev ? prev.note || '' : '',
+      done: prev ? prev.done || makeEmptyDone() : makeEmptyDone(),
+      work,
       updatedAt: Date.now(),
     }
-
-    if (mode === 'cloud') {
-      setBusy(true)
-      try {
-        const result = await apiSave(record)
-        setSaved((list) => upsert(list, result))
-        setCurrentId(result.id)
-        notify(currentId ? '已更新（雲端）' : '已儲存（雲端）')
-        setOpen(true)
-        return
-      } catch {
-        setMode('local')
-        notify('雲端連線失敗，改存本機')
-      } finally {
-        setBusy(false)
-      }
-    }
-
-    const rec = { ...record, id: currentId || String(Date.now()) }
-    setSaved((list) => upsert(list, rec))
-    setCurrentId(rec.id)
-    notify(currentId ? '已更新（本機）' : '已儲存（本機）')
+    setBusy(true)
+    const result = await persist(record)
+    setBusy(false)
+    setCurrentId(result.id)
+    notify(currentId ? '已更新' : '已儲存')
     setOpen(true)
   }
 
@@ -134,6 +159,7 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
       material: item.material,
       colors: Array.isArray(item.colors) ? item.colors : [],
     })
+    setWork({ ...makeEmptyWork(), ...(item.work || {}) })
     setCurrentId(item.id)
     notify(`已載入：${item.name}`)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -142,7 +168,7 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
   async function remove(id) {
     if (mode === 'cloud') {
       try {
-        await apiDelete(id)
+        await apiDelete(id, password)
       } catch {
         notify('雲端刪除失敗')
         return
@@ -152,21 +178,62 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
     if (currentId === id) setCurrentId(null)
   }
 
+  function toggleStep(item, key) {
+    const done = { ...makeEmptyDone(), ...(item.done || {}), [key]: !(item.done && item.done[key]) }
+    const updated = { ...item, done, updatedAt: Date.now() }
+    setSaved((list) => list.map((s) => (s.id === item.id ? updated : s)))
+    if (mode === 'cloud') apiSave(updated, password).catch(() => {})
+  }
+
   function setNoteLocal(id, note) {
     setSaved((list) => list.map((s) => (s.id === id ? { ...s, note } : s)))
   }
-
   function commitNote(id) {
     if (mode !== 'cloud') return
     const item = saved.find((s) => s.id === id)
-    if (item) apiSave(item).catch(() => {})
+    if (item) apiSave(item, password).catch(() => {})
   }
 
   function newProduct() {
     setProduct(makeDefaultProduct())
+    setWork(makeEmptyWork())
     setCurrentId(null)
     notify('已清空，可建立新商品')
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function exportJSON() {
+    const blob = new Blob([JSON.stringify(saved, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `enxi-products-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function importJSON(e) {
+    const file = e.target.files && e.target.files[0]
+    if (!file) return
+    try {
+      const arr = JSON.parse(await file.text())
+      if (!Array.isArray(arr)) throw new Error('格式不對')
+      for (const raw of arr) {
+        const rec = {
+          ...raw,
+          id: raw.id || String(Date.now() + Math.random()),
+          updatedAt: raw.updatedAt || Date.now(),
+        }
+        if (mode === 'cloud') await apiSave(rec, password)
+        else setSaved((list) => upsert(list, rec))
+      }
+      if (mode === 'cloud') setSaved(await apiList(password))
+      setOpen(true)
+      notify(`已匯入 ${arr.length} 筆`)
+    } catch (err) {
+      notify('匯入失敗：' + (err.message || '檔案錯誤'))
+    }
+    if (fileRef.current) fileRef.current.value = ''
   }
 
   return (
@@ -202,6 +269,30 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
 
       {open && (
         <div className="mt-2 space-y-2">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={exportJSON}
+              className="flex-1 rounded-lg border-2 border-slate-200 py-2 text-sm font-bold text-slate-600 active:scale-95"
+            >
+              ⬇️ 匯出備份
+            </button>
+            <button
+              type="button"
+              onClick={() => fileRef.current && fileRef.current.click()}
+              className="flex-1 rounded-lg border-2 border-slate-200 py-2 text-sm font-bold text-slate-600 active:scale-95"
+            >
+              ⬆️ 匯入
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={importJSON}
+              className="hidden"
+            />
+          </div>
+
           {mode === 'loading' && (
             <p className="px-1 py-3 text-center text-sm text-slate-400">讀取中…</p>
           )}
@@ -244,12 +335,35 @@ export default function SavedProducts({ product, setProduct, currentId, setCurre
                   </button>
                 </div>
               </div>
+
+              {/* 進度勾選 */}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {STEPS.map(([key, label]) => {
+                  const on = item.done && item.done[key]
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleStep(item, key)}
+                      className={`rounded-full px-3 py-1 text-xs font-bold active:scale-95 ${
+                        on
+                          ? 'bg-emerald-500 text-white'
+                          : 'border-2 border-slate-200 bg-white text-slate-400'
+                      }`}
+                    >
+                      {on ? '✓ ' : ''}
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+
               <input
                 type="text"
                 value={item.note || ''}
                 onChange={(e) => setNoteLocal(item.id, e.target.value)}
                 onBlur={() => commitNote(item.id)}
-                placeholder="進度備註，例：已上架 / 待產圖"
+                placeholder="備註（選填）"
                 className="mt-2 w-full rounded-lg border-2 border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-teal-500 focus:outline-none"
               />
             </div>

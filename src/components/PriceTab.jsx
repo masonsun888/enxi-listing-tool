@@ -1,12 +1,12 @@
-import { useState } from 'react'
 import { PEARL_BRAND, LOCKNLOCK_BRAND } from '../prompts.js'
 
 // 分頁4：定價試算（依品牌套不同公式）
 // 樂扣樂扣：成本 × 1.21（或對齊酷澎價）
 // 珍珠金屬：亞馬遜日幣價 × 0.19 × 1.31
 // 白牌/其他：成本 ÷ 0.49，使 (售價×0.79 − 成本) ÷ 售價 ≥ 30%
-export default function PriceTab({ product }) {
-  const [input, setInput] = useState('')
+export default function PriceTab({ product, work, setWork }) {
+  const input = work.cost
+  const setInput = (v) => setWork((w) => ({ ...w, cost: v }))
   const brand = product.brand
   const isPearl = brand === PEARL_BRAND
   const isLock = brand === LOCKNLOCK_BRAND

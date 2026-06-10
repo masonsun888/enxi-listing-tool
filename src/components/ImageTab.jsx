@@ -9,12 +9,11 @@ import {
 } from '../prompts.js'
 
 // 分頁3：製圖
-export default function ImageTab({ product }) {
+export default function ImageTab({ product, work, setWork }) {
   const [type, setType] = useState('main')
   const [result, setResult] = useState('')
-  const [sellingPoints, setSellingPoints] = useState('')
-  const [mainTitle, setMainTitle] = useState('')
-  const [subTitle, setSubTitle] = useState('')
+  const { sellingPoints, mainTitle, subTitle } = work
+  const set = (k, v) => setWork((w) => ({ ...w, [k]: v }))
 
   const isSpec = type === 'spec'
   const isMain = type === 'main'
@@ -87,7 +86,7 @@ export default function ImageTab({ product }) {
           <input
             type="text"
             value={mainTitle}
-            onChange={(e) => setMainTitle(e.target.value)}
+            onChange={(e) => set('mainTitle', e.target.value)}
             placeholder="例：小貓保溫杯"
             className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
           />
@@ -102,7 +101,7 @@ export default function ImageTab({ product }) {
           <input
             type="text"
             value={subTitle}
-            onChange={(e) => setSubTitle(e.target.value)}
+            onChange={(e) => set('subTitle', e.target.value)}
             placeholder="例：一鍵彈蓋 保溫保冰"
             className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
           />
@@ -117,7 +116,7 @@ export default function ImageTab({ product }) {
           <textarea
             rows={3}
             value={sellingPoints}
-            onChange={(e) => setSellingPoints(e.target.value)}
+            onChange={(e) => set('sellingPoints', e.target.value)}
             placeholder={'例：\n一鍵彈跳\n保溫保冰\n316不鏽鋼'}
             className="w-full resize-none rounded-xl border-2 border-slate-200 bg-white p-4 text-base text-slate-800 focus:border-teal-500 focus:outline-none"
           />

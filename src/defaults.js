@@ -6,3 +6,23 @@ export const makeDefaultProduct = () => ({
   material: '不鏽鋼',
   colors: [],
 })
+
+// 每個商品的「工作區」：各分頁的輸入與產出，存進商品後載入即全有。
+export const makeEmptyWork = () => ({
+  competitorTitles: '',
+  titleResult: '',
+  bodyResult: '',
+  mainTitle: '',
+  subTitle: '',
+  sellingPoints: '',
+  cost: '',
+})
+
+// 進度勾選狀態
+export const makeEmptyDone = () => ({
+  title: false,
+  body: false,
+  image: false,
+  price: false,
+  listed: false,
+})
