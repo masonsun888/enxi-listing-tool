@@ -32,8 +32,12 @@ Momo 標題：嚴格 ≤ 60 字元（中文 1 字 = 1 字元，含空格）。
 
 export function buildTitlePrompt(product, competitorTitles) {
   const competitors = competitorTitles.trim() || '（未提供競品標題）'
+  const brandRule =
+    product.brand === LOCKNLOCK_BRAND
+      ? '\n【品牌規則】本商品為樂扣樂扣，蝦皮標題與 Momo 標題的「開頭」一律以「樂扣樂扣 LocknLock」開始，其餘規則不變。'
+      : ''
   return [
-    TITLE_SYSTEM_PROMPT,
+    TITLE_SYSTEM_PROMPT + brandRule,
     '',
     '【商品資料】',
     formatProduct(product),
