@@ -16,6 +16,12 @@ export const makeEmptyWork = () => ({
   subTitle: '',
   sellingPoints: '',
   cost: '',
+  // 規格圖欄位
+  specCapacity: '',
+  specWeight: '',
+  specDiameter: '',
+  specHeight: '',
+  specBottomWidth: '',
 })
 
 // 進度勾選狀態

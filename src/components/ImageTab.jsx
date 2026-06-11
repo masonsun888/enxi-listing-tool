@@ -2,29 +2,61 @@ import { useState } from 'react'
 import ResultBox from './ResultBox.jsx'
 import {
   IMAGE_TYPES,
+  SCENE_OPTIONS,
+  HOWTO_OPTIONS,
   buildImagePrompt,
-  buildSpecLabel,
   PEARL_BRAND,
   LOCKNLOCK_BRAND,
 } from '../prompts.js'
+
+const labelCls = 'mb-1 block text-base font-bold text-slate-700'
+const inputCls =
+  'w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none'
+
+// 從清單挑一個與上次不同的（達成「每按一次換一個」）
+function pickDifferent(arr, last) {
+  if (arr.length <= 1) return arr[0]
+  let v = last
+  while (v === last) v = arr[Math.floor(Math.random() * arr.length)]
+  return v
+}
 
 // 分頁3：製圖
 export default function ImageTab({ product, work, setWork }) {
   const [type, setType] = useState('main')
   const [result, setResult] = useState('')
+  const [variant, setVariant] = useState('') // 本次情境/版型
   const { sellingPoints, mainTitle, subTitle } = work
   const set = (k, v) => setWork((w) => ({ ...w, [k]: v }))
 
-  const isSpec = type === 'spec'
   const isMain = type === 'main'
+  const isSpec = type === 'spec'
+  const isScene = type === 'scene'
+  const isHowto = type === 'howto'
+  const isRotating = isScene || isHowto
   const isPearl = product.brand === PEARL_BRAND
   const isLocknlock = product.brand === LOCKNLOCK_BRAND
-  // 白牌／其他品牌主圖走「爆款設計」版型；珍珠金屬／樂扣走乾淨實拍圖。
   const usesBaoKuan = product.brand !== PEARL_BRAND && product.brand !== LOCKNLOCK_BRAND
 
+  const specs = {
+    capacity: work.specCapacity,
+    weight: work.specWeight,
+    diameter: work.specDiameter,
+    height: work.specHeight,
+    bottomWidth: work.specBottomWidth,
+  }
+
   function generate() {
-    if (type === 'spec') {
-      setResult(buildSpecLabel(product))
+    if (isScene) {
+      const s = pickDifferent(SCENE_OPTIONS, variant)
+      setVariant(s)
+      setResult(buildImagePrompt('scene', product, { scene: s }))
+    } else if (isHowto) {
+      const h = pickDifferent(HOWTO_OPTIONS, variant)
+      setVariant(h)
+      setResult(buildImagePrompt('howto', product, { howto: h }))
+    } else if (isSpec) {
+      setResult(buildImagePrompt('spec', product, { specs }))
     } else {
       setResult(buildImagePrompt(type, product, { sellingPoints, mainTitle, subTitle }))
     }
@@ -33,6 +65,7 @@ export default function ImageTab({ product, work, setWork }) {
   function selectType(key) {
     setType(key)
     setResult('')
+    setVariant('')
   }
 
   return (
@@ -55,18 +88,10 @@ export default function ImageTab({ product, work, setWork }) {
         ))}
       </div>
 
-      {isSpec && (
-        <div className="mt-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-base font-semibold text-amber-800">
-          ⚠️ 規格圖請用固定排版模板套版，不要用 AI 生成，避免中文字寫錯。
-          <br />
-          下方是整理好的容量/尺寸/材質文字標籤，複製後拿去套版。
-        </div>
-      )}
-
-      {/* 珍珠金屬：所有 AI 圖都要放 logo，提醒員工一併上傳 logo 圖 */}
-      {!isSpec && isPearl && (
+      {/* 珍珠金屬：每張 AI 圖都放 logo（右上角），提醒一併上傳 logo 圖 */}
+      {isPearl && (
         <div className="mt-4 rounded-2xl border-2 border-sky-300 bg-sky-50 p-4 text-base font-semibold text-sky-800">
-          🏷️ 珍珠金屬：貼指令到 GPT 時，請「連同商品實拍照 + 珍珠金屬 logo 圖」一起上傳，指令會請 AI 把 logo 放到圖片右上角。
+          🏷️ 珍珠金屬：貼指令到 GPT 時，請「連同商品圖 + 珍珠金屬 logo 圖」一起上傳，指令會請 AI 把 logo 放到圖片右上角。
         </div>
       )}
 
@@ -77,42 +102,68 @@ export default function ImageTab({ product, work, setWork }) {
         </div>
       )}
 
-      {/* 主圖：所有品牌都有主標題；珍珠金屬／樂扣樂扣 另有賣點小標 */}
+      {/* 規格圖：填規格欄位，AI 自動排版到白底圖上 */}
+      {isSpec && (
+        <div className="mt-4 space-y-3">
+          <p className="rounded-xl bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800">
+            填好規格 → 上傳白底商品圖 → AI 自動把資訊排上去（品名取自上方「品名」，品牌字/ logo 也會自動套）。
+          </p>
+          <div>
+            <label className={labelCls}>容量</label>
+            <input type="text" value={work.specCapacity} onChange={(e) => set('specCapacity', e.target.value)} placeholder="例：500ml" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>重量（如有）</label>
+            <input type="text" value={work.specWeight} onChange={(e) => set('specWeight', e.target.value)} placeholder="例：280g" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>產品口徑（如有）</label>
+            <input type="text" value={work.specDiameter} onChange={(e) => set('specDiameter', e.target.value)} placeholder="例：7cm" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>產品高度</label>
+            <input type="text" value={work.specHeight} onChange={(e) => set('specHeight', e.target.value)} placeholder="例：20cm" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>底部寬度</label>
+            <input type="text" value={work.specBottomWidth} onChange={(e) => set('specBottomWidth', e.target.value)} placeholder="例：6.5cm" className={inputCls} />
+          </div>
+          <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
+            ⚠️ 規格數字最重要！圖出來後務必逐字核對數字有沒有寫錯，錯了就重生。
+          </p>
+        </div>
+      )}
+
+      {/* 主圖：主標題 + 副標題 */}
       {isMain && (
         <div className="mt-4">
-          <label className="mb-1 block text-base font-bold text-slate-700">
-            主圖主標題（大藝術字，留空 AI 自動生成）
-          </label>
+          <label className={labelCls}>主圖主標題（大藝術字，留空 AI 自動生成）</label>
           <input
             type="text"
             value={mainTitle}
             onChange={(e) => set('mainTitle', e.target.value)}
             placeholder="例：小貓保溫杯"
-            className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
+            className={inputCls}
           />
         </div>
       )}
 
       {isMain && (
         <div className="mt-3">
-          <label className="mb-1 block text-base font-bold text-slate-700">
-            副標題（選填，放主標題下方的小標語）
-          </label>
+          <label className={labelCls}>副標題（選填，放主標題下方的小標語）</label>
           <input
             type="text"
             value={subTitle}
             onChange={(e) => set('subTitle', e.target.value)}
             placeholder="例：一鍵彈蓋 保溫保冰"
-            className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
+            className={inputCls}
           />
         </div>
       )}
 
       {isMain && !usesBaoKuan && (
         <div className="mt-3">
-          <label className="mb-1 block text-base font-bold text-slate-700">
-            賣點小標（選填，一行一個，會排成比主標題小的藝術字）
-          </label>
+          <label className={labelCls}>賣點小標（選填，一行一個，會排成比主標題小的藝術字）</label>
           <textarea
             rows={3}
             value={sellingPoints}
@@ -132,15 +183,28 @@ export default function ImageTab({ product, work, setWork }) {
         </p>
       )}
 
+      {/* 情境圖 / 使用說明：每按一次換一個 */}
+      {isRotating && (
+        <p className="mt-4 rounded-xl bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800">
+          🔄 每按一次「產生」會自動換一個{isScene ? '情境場景' : '版型'}（共 {(isScene ? SCENE_OPTIONS : HOWTO_OPTIONS).length} 種）。
+        </p>
+      )}
+
       <button
         type="button"
         onClick={generate}
         className="mt-4 w-full rounded-2xl bg-slate-800 py-5 text-xl font-bold text-white shadow-md active:scale-[0.98]"
       >
-        {isSpec ? '產生規格文字標籤' : '產生製圖指令'}
+        {isRotating ? '產生指令（再按換一個）' : '產生製圖指令'}
       </button>
 
-      <ResultBox value={result} rows={isSpec ? 5 : 12} />
+      {isRotating && variant && (
+        <p className="mt-2 text-center text-sm font-bold text-teal-700">
+          本次：{variant}
+        </p>
+      )}
+
+      <ResultBox value={result} rows={12} />
     </div>
   )
 }
