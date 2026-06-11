@@ -84,7 +84,38 @@ export const IMAGE_TYPES = [
   { key: 'option', label: '選項圖' },
   { key: 'spec', label: '規格圖' },
   { key: 'scene', label: '情境圖' },
+  { key: 'howto', label: '使用說明' },
 ]
+
+// 情境圖場景庫（每次產生隨機換一個）
+export const SCENE_OPTIONS = [
+  '溫馨居家辦公桌',
+  '明亮廚房中島',
+  '戶外野餐草地',
+  '健身房運動場景',
+  '客廳沙發旁的小桌',
+  '露營野營折疊桌',
+  '車內飲料杯架',
+  '咖啡廳木質桌面',
+]
+
+// 使用說明版型庫（每次產生隨機換一個）
+export const HOWTO_OPTIONS = [
+  '橫式 3 格步驟圖解（由左到右）',
+  '直式步驟條列圖解（由上到下）',
+  '圓圈數字 1-2-3-4 步驟排版',
+  '商品特寫 + 箭頭指引功能標示',
+  '使用前後對比圖',
+]
+
+// 各圖種共用的品牌呈現邏輯（樂扣樂扣標準字／珍珠金屬 logo 右上角）。
+function brandInstruction(brand) {
+  if (brand === LOCKNLOCK_BRAND)
+    return '\n【品牌】在畫面上方放上乾淨的「樂扣樂扣 LocknLock」標準字（純文字、不使用 logo 圖案），低調專業。'
+  if (brand === PEARL_BRAND)
+    return '\n【品牌】我會另外提供一張品牌 logo 圖，請將「珍珠金屬 PEARL LIFE」logo 固定放在圖片「右上角」，清晰、比例自然、不變形、不遮擋商品。'
+  return ''
+}
 
 // 珍珠金屬：每一張 AI 圖都要放上品牌 logo（固定右上角）。
 function pearlLogoNote(brand) {
@@ -199,10 +230,42 @@ function buildLocknlockOfficialPrompt(product, { sellingPoints = '', mainTitle =
 【品牌】在畫面上方放上乾淨的「樂扣樂扣 LocknLock」標準字（純文字、不使用 logo 圖案），低調、專業、有官方信任感。${textBlock}`
 }
 
-// opts = { sellingPoints, mainTitle, subTitle }
-export function buildImagePrompt(type, product, opts = {}) {
-  const { sellingPoints = '', mainTitle = '', subTitle = '' } = opts
+// 規格圖（AI 製圖）：丟白底圖，自動把規格排上去。specs = {capacity, weight, diameter, height, bottomWidth}
+function buildSpecImagePrompt(product, specs = {}) {
+  const rows = []
+  if (product.name) rows.push(`品名：${product.name}`)
+  if (specs.capacity && specs.capacity.trim()) rows.push(`容量：${specs.capacity.trim()}`)
+  if (specs.weight && specs.weight.trim()) rows.push(`重量：${specs.weight.trim()}`)
+  if (specs.diameter && specs.diameter.trim()) rows.push(`口徑：${specs.diameter.trim()}`)
+  if (specs.height && specs.height.trim()) rows.push(`高度：${specs.height.trim()}`)
+  if (specs.bottomWidth && specs.bottomWidth.trim()) rows.push(`底部寬度：${specs.bottomWidth.trim()}`)
+  const specList = rows.length > 0 ? rows.join('\n') : '（尚未填寫規格，請先在上方填好）'
+
+  return `以我上傳的「白底商品圖」為準，完整保留商品原樣（不重畫、不變形、不更動顏色），製作乾淨專業的電商「商品規格圖」。
+
+在商品旁邊或下方的留白處，用整齊清楚的繁體中文「規格表」排版，列出以下規格（數字與文字必須與我提供的完全一致，一個字都不可更改、不可自行增減）：
+${specList}
+
+【排版要求】白底或極淺灰底、欄位對齊整齊、字體乾淨易讀、留白充足、不遮擋商品；風格簡潔專業、像品牌官方規格圖，不要花俏裝飾。正方形 1:1。${brandInstruction(product.brand)}`
+}
+
+// 情境圖：傳入這次要用的場景字串。
+function buildScenePrompt(product, scene) {
   const name = product.name || '【品名】'
+  const where = scene || '生活場景'
+  return `以我上傳的實拍為商品參考，保持商品外觀、材質、顏色一致（不重畫商品）。將${name}自然放入「${where}」的生活情境，溫暖自然光、真實居家質感、淺景深，商品為視覺焦點，正方形 1:1。${brandInstruction(product.brand)}`
+}
+
+// 使用說明圖：傳入這次要用的版型字串。
+function buildHowtoPrompt(product, variant) {
+  const name = product.name || '【品名】'
+  const layout = variant || '清楚的步驟圖解'
+  return `以我上傳的實拍為商品參考，保持商品外觀一致（不重畫商品），製作清楚好懂的「商品使用說明圖」。請依商品自動判斷正確使用方式，用「${layout}」的版面，呈現 3–4 個精簡步驟。繁體中文、必須正確無錯字、字數精簡、步驟與數字清楚、不雜亂、不遮擋商品，正方形 1:1。${brandInstruction(product.brand)}`
+}
+
+// opts = { sellingPoints, mainTitle, subTitle, specs, scene, howto }
+export function buildImagePrompt(type, product, opts = {}) {
+  const { sellingPoints = '', mainTitle = '', subTitle = '', specs = {}, scene = '', howto = '' } = opts
   const colors = product.colors.length > 0 ? product.colors.join('/') : '【顏色】'
   const usesBaoKuan = product.brand !== PEARL_BRAND && product.brand !== LOCKNLOCK_BRAND
 
@@ -217,11 +280,12 @@ export function buildImagePrompt(type, product, opts = {}) {
         `以我上傳的${colors}實拍照片為準，商品外觀與顏色完全保留。去背，純白背景，正方形1:1，電商選項展示用。不得更動商品顏色。` +
         pearlLogoNote(product.brand)
       )
+    case 'spec':
+      return buildSpecImagePrompt(product, specs)
     case 'scene':
-      return (
-        `以我上傳的實拍為商品參考，保持商品外觀一致。將${name}自然放入【辦公桌/廚房/野餐/客廳，擇一】的生活場景，溫暖自然光，居家質感，商品為視覺焦點，正方形1:1。` +
-        pearlLogoNote(product.brand)
-      )
+      return buildScenePrompt(product, scene)
+    case 'howto':
+      return buildHowtoPrompt(product, howto)
     default:
       return ''
   }
