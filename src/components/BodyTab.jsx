@@ -1,13 +1,10 @@
-import { useState } from 'react'
 import ResultBox from './ResultBox.jsx'
 import { buildBodyPrompt } from '../prompts.js'
 
 // 分頁2：內文（不需額外輸入，沿用商品基本資料）
-export default function BodyTab({ product }) {
-  const [result, setResult] = useState('')
-
+export default function BodyTab({ product, work, setWork }) {
   function generate() {
-    setResult(buildBodyPrompt(product))
+    setWork((w) => ({ ...w, bodyResult: buildBodyPrompt(product) }))
   }
 
   return (
@@ -24,7 +21,7 @@ export default function BodyTab({ product }) {
         產生內文指令
       </button>
 
-      <ResultBox value={result} rows={12} />
+      <ResultBox value={work.bodyResult} rows={12} />
     </div>
   )
 }

@@ -1,7 +1,5 @@
 import { useState } from 'react'
-
-const BRANDS = ['樂扣', '珍珠金屬']
-const MATERIALS = ['不鏽鋼', 'PP塑膠', '玻璃', '矽膠', '其他']
+import { BRANDS, MATERIALS, LOCKNLOCK_BRAND } from '../prompts.js'
 
 const labelCls = 'mb-1 block text-base font-bold text-slate-700'
 const inputCls =
@@ -13,6 +11,17 @@ export default function ProductForm({ product, setProduct }) {
 
   function update(field, value) {
     setProduct((p) => ({ ...p, [field]: value }))
+  }
+
+  // 選樂扣時品名預設帶入「樂扣」；從樂扣切走且品名仍只是「樂扣」時清空，避免殘留。
+  function updateBrand(value) {
+    setProduct((p) => {
+      let name = p.name
+      if (value === LOCKNLOCK_BRAND && name.trim() === '') name = LOCKNLOCK_BRAND
+      else if (p.brand === LOCKNLOCK_BRAND && value !== LOCKNLOCK_BRAND && name.trim() === LOCKNLOCK_BRAND)
+        name = ''
+      return { ...p, brand: value, name }
+    })
   }
 
   function addColor() {
@@ -39,7 +48,7 @@ export default function ProductForm({ product, setProduct }) {
           <label className={labelCls}>品牌</label>
           <select
             value={product.brand}
-            onChange={(e) => update('brand', e.target.value)}
+            onChange={(e) => updateBrand(e.target.value)}
             className={inputCls}
           >
             {BRANDS.map((b) => (

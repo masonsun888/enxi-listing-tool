@@ -1,19 +1,32 @@
 import { useState } from 'react'
 import ResultBox from './ResultBox.jsx'
-import { IMAGE_TYPES, buildImagePrompt, buildSpecLabel } from '../prompts.js'
+import {
+  IMAGE_TYPES,
+  buildImagePrompt,
+  buildSpecLabel,
+  PEARL_BRAND,
+  LOCKNLOCK_BRAND,
+} from '../prompts.js'
 
 // 分頁3：製圖
-export default function ImageTab({ product }) {
+export default function ImageTab({ product, work, setWork }) {
   const [type, setType] = useState('main')
   const [result, setResult] = useState('')
+  const { sellingPoints, mainTitle, subTitle } = work
+  const set = (k, v) => setWork((w) => ({ ...w, [k]: v }))
 
   const isSpec = type === 'spec'
+  const isMain = type === 'main'
+  const isPearl = product.brand === PEARL_BRAND
+  const isLocknlock = product.brand === LOCKNLOCK_BRAND
+  // 白牌／其他品牌主圖走「爆款設計」版型；珍珠金屬／樂扣走乾淨實拍圖。
+  const usesBaoKuan = product.brand !== PEARL_BRAND && product.brand !== LOCKNLOCK_BRAND
 
   function generate() {
     if (type === 'spec') {
       setResult(buildSpecLabel(product))
     } else {
-      setResult(buildImagePrompt(type, product))
+      setResult(buildImagePrompt(type, product, { sellingPoints, mainTitle, subTitle }))
     }
   }
 
@@ -50,6 +63,75 @@ export default function ImageTab({ product }) {
         </div>
       )}
 
+      {/* 珍珠金屬：所有 AI 圖都要放 logo，提醒員工一併上傳 logo 圖 */}
+      {!isSpec && isPearl && (
+        <div className="mt-4 rounded-2xl border-2 border-sky-300 bg-sky-50 p-4 text-base font-semibold text-sky-800">
+          🏷️ 珍珠金屬：貼指令到 GPT 時，請「連同商品實拍照 + 珍珠金屬 logo 圖」一起上傳，指令會請 AI 把 logo 放到圖片右上角。
+        </div>
+      )}
+
+      {/* 樂扣樂扣主圖：官方旗艦店乾淨白底風 */}
+      {isMain && isLocknlock && (
+        <div className="mt-4 rounded-2xl border-2 border-sky-300 bg-sky-50 p-4 text-base font-semibold text-sky-800">
+          🏷️ 樂扣樂扣＝官方旗艦店風（乾淨白底、專業棚拍）。主標題/副標題/賣點都「選填」，留空則產生最乾淨的官方目錄圖；不使用 logo 圖、不必上傳。
+        </div>
+      )}
+
+      {/* 主圖：所有品牌都有主標題；珍珠金屬／樂扣樂扣 另有賣點小標 */}
+      {isMain && (
+        <div className="mt-4">
+          <label className="mb-1 block text-base font-bold text-slate-700">
+            主圖主標題（大藝術字，留空 AI 自動生成）
+          </label>
+          <input
+            type="text"
+            value={mainTitle}
+            onChange={(e) => set('mainTitle', e.target.value)}
+            placeholder="例：小貓保溫杯"
+            className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
+          />
+        </div>
+      )}
+
+      {isMain && (
+        <div className="mt-3">
+          <label className="mb-1 block text-base font-bold text-slate-700">
+            副標題（選填，放主標題下方的小標語）
+          </label>
+          <input
+            type="text"
+            value={subTitle}
+            onChange={(e) => set('subTitle', e.target.value)}
+            placeholder="例：一鍵彈蓋 保溫保冰"
+            className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none"
+          />
+        </div>
+      )}
+
+      {isMain && !usesBaoKuan && (
+        <div className="mt-3">
+          <label className="mb-1 block text-base font-bold text-slate-700">
+            賣點小標（選填，一行一個，會排成比主標題小的藝術字）
+          </label>
+          <textarea
+            rows={3}
+            value={sellingPoints}
+            onChange={(e) => set('sellingPoints', e.target.value)}
+            placeholder={'例：\n一鍵彈跳\n保溫保冰\n316不鏽鋼'}
+            className="w-full resize-none rounded-xl border-2 border-slate-200 bg-white p-4 text-base text-slate-800 focus:border-teal-500 focus:outline-none"
+          />
+          <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
+            ⚠️ AI 畫的中文字常會出錯，圖出來後一定要逐字核對；有錯字就重生或改用排版套字。
+          </p>
+        </div>
+      )}
+
+      {isMain && usesBaoKuan && (
+        <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700">
+          ⚠️ 白牌走「爆款設計圖」版型：請另外上傳一張你喜歡的版型參考圖給 GPT，AI 畫的中文字一樣要逐字核對。
+        </p>
+      )}
+
       <button
         type="button"
         onClick={generate}
@@ -58,7 +140,7 @@ export default function ImageTab({ product }) {
         {isSpec ? '產生規格文字標籤' : '產生製圖指令'}
       </button>
 
-      <ResultBox value={result} rows={isSpec ? 5 : 8} />
+      <ResultBox value={result} rows={isSpec ? 5 : 12} />
     </div>
   )
 }

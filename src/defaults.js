@@ -1,0 +1,28 @@
+// 共用的空白商品（App 初始值與「新商品」皆用這個，避免重複定義）
+export const makeDefaultProduct = () => ({
+  brand: '樂扣樂扣',
+  name: '樂扣樂扣',
+  size: '',
+  material: '不鏽鋼',
+  colors: [],
+})
+
+// 每個商品的「工作區」：各分頁的輸入與產出，存進商品後載入即全有。
+export const makeEmptyWork = () => ({
+  competitorTitles: '',
+  titleResult: '',
+  bodyResult: '',
+  mainTitle: '',
+  subTitle: '',
+  sellingPoints: '',
+  cost: '',
+})
+
+// 進度勾選狀態
+export const makeEmptyDone = () => ({
+  title: false,
+  body: false,
+  image: false,
+  price: false,
+  listed: false,
+})

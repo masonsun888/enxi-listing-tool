@@ -1,14 +1,12 @@
-import { useState } from 'react'
 import ResultBox from './ResultBox.jsx'
 import { buildTitlePrompt } from '../prompts.js'
 
 // 分頁1：標題
-export default function TitleTab({ product }) {
-  const [competitors, setCompetitors] = useState('')
-  const [result, setResult] = useState('')
+export default function TitleTab({ product, work, setWork }) {
+  const set = (k, v) => setWork((w) => ({ ...w, [k]: v }))
 
   function generate() {
-    setResult(buildTitlePrompt(product, competitors))
+    set('titleResult', buildTitlePrompt(product, work.competitorTitles))
   }
 
   return (
@@ -18,8 +16,8 @@ export default function TitleTab({ product }) {
       </label>
       <textarea
         rows={4}
-        value={competitors}
-        onChange={(e) => setCompetitors(e.target.value)}
+        value={work.competitorTitles}
+        onChange={(e) => set('competitorTitles', e.target.value)}
         placeholder="一行一個競品標題⋯⋯"
         className="w-full resize-none rounded-xl border-2 border-slate-200 bg-white p-4 text-base text-slate-800 focus:border-teal-500 focus:outline-none"
       />
@@ -32,7 +30,7 @@ export default function TitleTab({ product }) {
         產生標題指令
       </button>
 
-      <ResultBox value={result} rows={14} />
+      <ResultBox value={work.titleResult} rows={14} />
     </div>
   )
 }

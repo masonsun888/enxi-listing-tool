@@ -1,25 +1,60 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ProductForm from './components/ProductForm.jsx'
+import SavedProducts from './components/SavedProducts.jsx'
 import TitleTab from './components/TitleTab.jsx'
 import BodyTab from './components/BodyTab.jsx'
 import ImageTab from './components/ImageTab.jsx'
+import PriceTab from './components/PriceTab.jsx'
 import Footer from './components/Footer.jsx'
+import LockScreen from './components/LockScreen.jsx'
+import { makeDefaultProduct, makeEmptyWork } from './defaults.js'
 
 const TABS = [
   { key: 'title', label: '標題' },
   { key: 'body', label: '內文' },
   { key: 'image', label: '製圖' },
+  { key: 'price', label: '定價' },
 ]
 
+const PW_KEY = 'enxi_pw'
+
 export default function App() {
-  const [product, setProduct] = useState({
-    brand: '樂扣',
-    name: '',
-    size: '',
-    material: '不鏽鋼',
-    colors: [],
-  })
+  const [product, setProduct] = useState(makeDefaultProduct)
+  const [work, setWork] = useState(makeEmptyWork)
+  const [currentId, setCurrentId] = useState(null)
   const [tab, setTab] = useState('title')
+
+  // 密碼鎖：'checking' | 'open' | 'locked'。後端未設密碼時一律 open。
+  const [authState, setAuthState] = useState('checking')
+  const [password, setPassword] = useState(() => sessionStorage.getItem(PW_KEY) || '')
+
+  useEffect(() => {
+    const headers = password ? { 'x-app-password': password } : {}
+    fetch('/api/products', { headers })
+      .then((r) => {
+        if (r.status === 401) setAuthState('locked')
+        else setAuthState('open') // 200=通過；其他狀態(503/網路)交給 SavedProducts 退回本機
+      })
+      .catch(() => setAuthState('open')) // 連不到後端 → 本機模式，不擋
+  }, [password])
+
+  function unlock(pw) {
+    sessionStorage.setItem(PW_KEY, pw)
+    setPassword(pw)
+    setAuthState('checking')
+  }
+
+  if (authState === 'checking') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-400">
+        載入中⋯
+      </div>
+    )
+  }
+
+  if (authState === 'locked') {
+    return <LockScreen onUnlock={unlock} />
+  }
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-[480px] bg-slate-100 px-4 pb-10 pt-4">
@@ -30,8 +65,18 @@ export default function App() {
 
       <ProductForm product={product} setProduct={setProduct} />
 
+      <SavedProducts
+        product={product}
+        setProduct={setProduct}
+        work={work}
+        setWork={setWork}
+        currentId={currentId}
+        setCurrentId={setCurrentId}
+        password={password}
+      />
+
       {/* 分頁切換 */}
-      <nav className="sticky top-0 z-10 mt-5 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 py-2">
+      <nav className="sticky top-0 z-10 mt-5 grid grid-cols-4 gap-2 rounded-2xl bg-slate-100 py-2">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -49,9 +94,10 @@ export default function App() {
       </nav>
 
       <main className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
-        {tab === 'title' && <TitleTab product={product} />}
-        {tab === 'body' && <BodyTab product={product} />}
-        {tab === 'image' && <ImageTab product={product} />}
+        {tab === 'title' && <TitleTab product={product} work={work} setWork={setWork} />}
+        {tab === 'body' && <BodyTab product={product} work={work} setWork={setWork} />}
+        {tab === 'image' && <ImageTab product={product} work={work} setWork={setWork} />}
+        {tab === 'price' && <PriceTab product={product} work={work} setWork={setWork} />}
       </main>
 
       <Footer />
