@@ -1,19 +1,16 @@
-name = "enxi-listing-tool"
-compatibility_date = "2025-01-01"
+# 恩希 SKU 健康管理系統 — 最小版部署設定
+name = "enxi-sku"
 main = "worker/index.js"
+compatibility_date = "2025-06-01"
 
-# 部署前自己跑 build，確保一定有 dist。
-[build]
-command = "npm install && npm run build"
-
-# 前端靜態網站（dist），同時提供 ASSETS 綁定給 Worker 取用。
+# 靜態首頁（public/index.html），同時把 ASSETS 綁定給 Worker 使用。
 [assets]
-directory = "./dist"
+directory = "./public"
 binding = "ASSETS"
-not_found_handling = "single-page-application"
-run_worker_first = ["/api/*"]
 
-# 雲端商品儲存（共用）：KV namespace 綁定為 PRODUCTS。
-[[kv_namespaces]]
-binding = "PRODUCTS"
-id = "af6fb945695b441f8613afbca2673151"
+# Cloudflare D1 資料庫。
+# database_id 會在執行 `wrangler d1 create enxi-sku` 之後自動填入。
+[[d1_databases]]
+binding = "DB"
+database_name = "enxi-sku"
+database_id = "PLACEHOLDER_RUN_D1_CREATE"
