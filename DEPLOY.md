@@ -27,5 +27,7 @@
 ## 備註
 
 - `.nvmrc` 已釘 Node 22，Cloudflare 會自動用相同版本 build，避免「本地可以、線上掛掉」。
-- 純前端靜態網站，無後端、無環境變數需要設定。
+- 「白牌九圖」的 AI 分析需要一個 secret：`wrangler secret put ANTHROPIC_API_KEY`（複用啵啵那套 Anthropic 帳號）。
+  沒設的話其餘功能照常，只有 `/api/analyze` 回 503、前端提示「後台尚未設定 AI 金鑰」。
+- Hero 主圖的「標準版型參考圖」放 `public/assets/hero-ref-1.jpg`（見 `public/assets/README.txt`）。
 - 若要綁自訂網域：Pages 專案 → **Custom domains** → 加上你的網域即可。
