@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validateAnalysis, parseAnalysisText } from '../worker/analyze.js'
+import { validateAnalysis, parseAnalysisText, costTWD, monthKey } from '../worker/analyze.js'
 
 function makeValidAnalysis() {
   const palette = {
@@ -57,6 +57,21 @@ test('缺欄位視同失敗', () => {
     mutate(a)
     assert.equal(validateAnalysis(a), false)
   }
+})
+
+test('costTWD：典型一次分析約 0.6~0.7 元台幣', () => {
+  // 8000 input（$1/M）+ 2500 output（$5/M）= $0.0205 USD ≈ NT$0.656（匯率 32）
+  const cost = costTWD(8000, 2500)
+  assert.ok(cost > 0.5 && cost < 0.8, `實際：${cost}`)
+  assert.equal(costTWD(0, 0), 0)
+})
+
+test('monthKey：台灣時區年月，跨月邊界正確', () => {
+  assert.match(monthKey(), /^\d{4}-\d{2}$/)
+  // UTC 7/31 20:00 = 台灣 8/1 04:00 → 應歸入 8 月
+  assert.equal(monthKey(Date.UTC(2026, 6, 31, 20, 0, 0)), '2026-08')
+  // UTC 7/31 10:00 = 台灣 7/31 18:00 → 仍是 7 月
+  assert.equal(monthKey(Date.UTC(2026, 6, 31, 10, 0, 0)), '2026-07')
 })
 
 test('parseAnalysisText：可去除 markdown 圍欄', () => {

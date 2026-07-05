@@ -2,7 +2,7 @@
 // 沒有設定 KV 綁定時，/api 會回 503，前端會自動退回「本機暫存」模式。
 // 有設定 env.APP_PASSWORD 時，/api 需帶 x-app-password 標頭，否則回 401（前端會跳密碼鎖）。
 
-import { handleAnalyze } from './analyze.js'
+import { handleAnalyze, buildBudget } from './analyze.js'
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' }
 const PREFIX = 'product:'
@@ -36,6 +36,11 @@ async function handleApi(request, env, url) {
   // /api/analyze：白牌九圖的 AI 素材分析（不需要 KV）
   if (url.pathname === '/api/analyze' && request.method === 'POST') {
     return handleAnalyze(request, env)
+  }
+
+  // /api/usage：本月 AI 分析額度（前端進度條用）
+  if (url.pathname === '/api/usage' && request.method === 'GET') {
+    return json({ budget: await buildBudget(env) })
   }
 
   if (!env.PRODUCTS) return json({ error: 'KV 尚未設定' }, 503)

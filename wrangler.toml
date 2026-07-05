@@ -13,6 +13,10 @@ binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
+# 白牌九圖：AI 分析每月額度上限（新台幣）。用滿就鎖，下月 1 號自動重置。
+[vars]
+ANALYZE_MONTHLY_BUDGET_TWD = "300"
+
 # 雲端商品儲存（共用）：KV namespace 綁定為 PRODUCTS。
 [[kv_namespaces]]
 binding = "PRODUCTS"

@@ -96,6 +96,76 @@ export function validateAnalysis(a) {
   return true
 }
 
+// ===== AI 額度追蹤（存 KV，按台灣時區月份歸戶）=====
+// 注意：只統計「本工具」的 /api/analyze 花費；同一把 API key 若還有別的工具在用，那邊的錢不會算進來。
+const PRICING_USD_PER_MTOK = { input: 1.0, output: 5.0 } // claude-haiku-4-5；換模型記得同步改
+const USD_TO_TWD = 32
+const DEFAULT_MONTHLY_BUDGET_TWD = 300
+const USAGE_PREFIX = 'usage:analyze:'
+
+// 台灣時區（UTC+8）的年月，額度每月 1 號自動歸零（換 key 即歸零，不用排程）。
+export function monthKey(now = Date.now()) {
+  return new Date(now + 8 * 3600 * 1000).toISOString().slice(0, 7)
+}
+
+export function costTWD(inputTokens, outputTokens) {
+  const usd =
+    (inputTokens * PRICING_USD_PER_MTOK.input + outputTokens * PRICING_USD_PER_MTOK.output) / 1e6
+  return usd * USD_TO_TWD
+}
+
+function budgetLimitTWD(env) {
+  const v = parseFloat(env.ANALYZE_MONTHLY_BUDGET_TWD)
+  return Number.isFinite(v) && v > 0 ? v : DEFAULT_MONTHLY_BUDGET_TWD
+}
+
+async function readUsageRecord(env) {
+  const raw = await env.PRODUCTS.get(USAGE_PREFIX + monthKey())
+  if (!raw) return { calls: 0, inputTokens: 0, outputTokens: 0 }
+  try {
+    const rec = JSON.parse(raw)
+    return {
+      calls: rec.calls || 0,
+      inputTokens: rec.inputTokens || 0,
+      outputTokens: rec.outputTokens || 0,
+    }
+  } catch {
+    return { calls: 0, inputTokens: 0, outputTokens: 0 }
+  }
+}
+
+async function addUsage(env, inputTokens, outputTokens) {
+  if (!env.PRODUCTS || (!inputTokens && !outputTokens)) return
+  try {
+    const rec = await readUsageRecord(env)
+    rec.calls += 1
+    rec.inputTokens += inputTokens
+    rec.outputTokens += outputTokens
+    rec.updatedAt = Date.now()
+    await env.PRODUCTS.put(USAGE_PREFIX + monthKey(), JSON.stringify(rec))
+  } catch {
+    // 記帳失敗不影響分析結果
+  }
+}
+
+// 給前端進度條用的額度摘要。KV 沒綁定（本機開發）時 tracked=false，前端不顯示、也不鎖。
+export async function buildBudget(env) {
+  const limitTWD = budgetLimitTWD(env)
+  if (!env.PRODUCTS) {
+    return { month: monthKey(), calls: 0, usedTWD: 0, limitTWD, percent: 0, tracked: false }
+  }
+  const rec = await readUsageRecord(env)
+  const usedTWD = Math.round(costTWD(rec.inputTokens, rec.outputTokens) * 100) / 100
+  return {
+    month: monthKey(),
+    calls: rec.calls,
+    usedTWD,
+    limitTWD,
+    percent: Math.min(100, Math.round((usedTWD / limitTWD) * 100)),
+    tracked: true,
+  }
+}
+
 // 去除 ``` 圍欄後 parse；失敗丟例外。
 export function parseAnalysisText(text) {
   let t = String(text || '').trim()
@@ -138,14 +208,35 @@ async function callClaude(env, messages) {
     throw new Error(`anthropic ${res.status}: ${detail.slice(0, 300)}`)
   }
   const data = await res.json()
-  return (data.content || [])
+  const text = (data.content || [])
     .filter((b) => b.type === 'text')
     .map((b) => b.text)
     .join('')
+  const usage = data.usage || {}
+  return {
+    text,
+    inputTokens:
+      (usage.input_tokens || 0) +
+      (usage.cache_creation_input_tokens || 0) +
+      (usage.cache_read_input_tokens || 0),
+    outputTokens: usage.output_tokens || 0,
+  }
 }
 
 export async function handleAnalyze(request, env) {
   if (!env.ANTHROPIC_API_KEY) return json({ error: '後台尚未設定 AI 金鑰' }, 503)
+
+  // 額度鎖：本月花費達上限就直接擋下，不呼叫 AI。
+  const budgetBefore = await buildBudget(env)
+  if (budgetBefore.tracked && budgetBefore.usedTWD >= budgetBefore.limitTWD) {
+    return json(
+      {
+        error: `本月 AI 分析額度已用完（NT$${budgetBefore.usedTWD} / NT$${budgetBefore.limitTWD}），下月 1 號自動重置`,
+        budget: budgetBefore,
+      },
+      429,
+    )
+  }
 
   let body
   try {
@@ -171,10 +262,18 @@ export async function handleAnalyze(request, env) {
     { role: 'user', content: [{ type: 'text', text: buildUserText(product) }, ...imageBlocks] },
   ]
 
+  // 兩次呼叫（含重試）的 token 都要記帳——失敗的呼叫一樣有花錢。
+  let spentInput = 0
+  let spentOutput = 0
+
   let raw
   try {
-    raw = await callClaude(env, firstMessages)
+    const first = await callClaude(env, firstMessages)
+    raw = first.text
+    spentInput += first.inputTokens
+    spentOutput += first.outputTokens
   } catch (err) {
+    await addUsage(env, spentInput, spentOutput)
     return json({ error: 'AI 分析失敗：' + String(err && err.message ? err.message : err) }, 502)
   }
 
@@ -194,14 +293,18 @@ export async function handleAnalyze(request, env) {
         { role: 'assistant', content: raw || '（空白輸出）' },
         { role: 'user', content: '你上次輸出不是合法 JSON 或缺少必填欄位。請重新輸出：只輸出完整合法的 JSON，不要 markdown 圍欄、不要任何解說文字。' },
       ]
-      const retryRaw = await callClaude(env, retryMessages)
-      const parsed = parseAnalysisText(retryRaw)
+      const retry = await callClaude(env, retryMessages)
+      spentInput += retry.inputTokens
+      spentOutput += retry.outputTokens
+      const parsed = parseAnalysisText(retry.text)
       if (validateAnalysis(parsed)) analysis = parsed
     } catch {
       // 落到下面的 502
     }
   }
 
-  if (!analysis) return json({ error: 'AI 忙線中，再按一次' }, 502)
-  return json({ analysis })
+  await addUsage(env, spentInput, spentOutput)
+
+  if (!analysis) return json({ error: 'AI 忙線中，再按一次', budget: await buildBudget(env) }, 502)
+  return json({ analysis, budget: await buildBudget(env) })
 }

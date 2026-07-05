@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MATERIALS } from '../prompts.js'
 import { buildNine } from '../nineTemplates.js'
 import { compressToJpeg } from '../imageUtils.js'
@@ -17,6 +17,34 @@ const SPEC_FIELDS = [
 ]
 
 const MAX_ANALYZE_IMAGES = 4
+
+// 本月 AI 額度進度條：用滿變紅、超過 8 成變黃。
+function BudgetBar({ budget }) {
+  if (!budget || !budget.tracked) return null
+  const full = budget.usedTWD >= budget.limitTWD
+  const barColor = full ? 'bg-rose-500' : budget.percent >= 80 ? 'bg-amber-400' : 'bg-teal-500'
+  return (
+    <section className="rounded-2xl bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between text-sm font-bold text-slate-700">
+        <span>🪙 本月 AI 分析額度</span>
+        <span>
+          NT${budget.usedTWD} / NT${budget.limitTWD}
+        </span>
+      </div>
+      <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full transition-all ${barColor}`}
+          style={{ width: `${Math.max(budget.percent, budget.usedTWD > 0 ? 2 : 0)}%` }}
+        />
+      </div>
+      <p className={`mt-1 text-xs ${full ? 'font-bold text-rose-600' : 'text-slate-400'}`}>
+        {full
+          ? '額度已用完，下月 1 號自動重置（要調整上限請找 Mason）'
+          : `本月已分析 ${budget.calls} 次，每次不到 NT$1`}
+      </p>
+    </section>
+  )
+}
 
 // 配色卡上的一格色塊
 function Swatch({ colors, label }) {
@@ -40,7 +68,15 @@ export default function NinePage({ product, setProduct, work, setWork, password 
   const [colorDraft, setColorDraft] = useState('')
   const [titleDraft, setTitleDraft] = useState('') // 產生前的主標題輸入
   const [issueOpen, setIssueOpen] = useState(null) // 點開哪張圖的健檢問題
+  const [budget, setBudget] = useState(null) // 本月 AI 額度（/api/usage）
   const fileRef = useRef(null)
+
+  useEffect(() => {
+    fetch('/api/usage', { headers: password ? { 'x-app-password': password } : {} })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && d.budget && setBudget(d.budget))
+      .catch(() => {}) // 本機模式沒有後端就不顯示進度條
+  }, [password])
 
   const nine = work.nine && work.nine.analysis ? work.nine : null
   const specs = {
@@ -85,9 +121,10 @@ export default function NinePage({ product, setProduct, work, setWork, password 
   const missing = []
   if (images.length === 0) missing.push('商品素材圖')
   if (!product.name.trim()) missing.push('品名')
+  const overBudget = !!(budget && budget.tracked && budget.usedTWD >= budget.limitTWD)
 
   async function generate() {
-    if (missing.length > 0 || analyzing) return
+    if (missing.length > 0 || analyzing || overBudget) return
     setError('')
     setAnalyzing(true)
     try {
@@ -112,8 +149,14 @@ export default function NinePage({ product, setProduct, work, setWork, password 
         }),
       })
       if (res.status === 503) throw new Error('後台尚未設定 AI 金鑰，請先 wrangler secret put ANTHROPIC_API_KEY')
+      if (res.status === 429) {
+        const d = await res.json().catch(() => ({}))
+        if (d.budget) setBudget(d.budget)
+        throw new Error(d.error || '本月 AI 額度已用完')
+      }
       if (!res.ok) throw new Error('AI 忙線中，再按一次')
       const data = await res.json()
+      if (data.budget) setBudget(data.budget)
       if (!data.analysis) throw new Error('AI 忙線中，再按一次')
       setWork((w) => ({
         ...w,
@@ -343,16 +386,24 @@ export default function NinePage({ product, setProduct, work, setWork, password 
         </div>
       </section>
 
+      {/* 本月 AI 額度 */}
+      <BudgetBar budget={budget} />
+
       {/* ③ 大按鈕 */}
       <button
         type="button"
         onClick={generate}
-        disabled={missing.length > 0 || analyzing}
+        disabled={missing.length > 0 || analyzing || overBudget}
         className="w-full rounded-2xl bg-teal-600 py-6 text-2xl font-extrabold text-white shadow-md transition active:scale-[0.98] disabled:bg-slate-300"
       >
         {analyzing ? '🤖 AI 分析中…（約 10 秒）' : nine ? '🔁 重新分析（重產九張）' : '🚀 產生九張圖指令'}
       </button>
-      {missing.length > 0 && (
+      {overBudget && (
+        <p className="text-center text-sm font-bold text-rose-600">
+          本月 AI 額度已用完，暫時無法分析（已存的九張指令照常可用）
+        </p>
+      )}
+      {!overBudget && missing.length > 0 && (
         <p className="text-center text-sm font-bold text-slate-400">還缺：{missing.join('、')}</p>
       )}
       {error && <p className="text-center text-sm font-bold text-rose-600">{error}</p>}

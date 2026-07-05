@@ -29,5 +29,7 @@
 - `.nvmrc` 已釘 Node 22，Cloudflare 會自動用相同版本 build，避免「本地可以、線上掛掉」。
 - 「白牌九圖」的 AI 分析需要一個 secret：`wrangler secret put ANTHROPIC_API_KEY`（複用啵啵那套 Anthropic 帳號）。
   沒設的話其餘功能照常，只有 `/api/analyze` 回 503、前端提示「後台尚未設定 AI 金鑰」。
+- AI 分析每月額度上限在 `wrangler.toml` 的 `ANALYZE_MONTHLY_BUDGET_TWD`（預設 300 台幣），改完重新部署即生效。
+  注意：只統計本工具的分析花費；同一把 API key 給其他工具用的部分不會算進來。
 - Hero 主圖的「標準版型參考圖」放 `public/assets/hero-ref-1.jpg`（見 `public/assets/README.txt`）。
 - 若要綁自訂網域：Pages 專案 → **Custom domains** → 加上你的網域即可。
