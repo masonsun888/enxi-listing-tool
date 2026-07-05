@@ -89,6 +89,10 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
   const pal = palettePick === 'alt' ? analysis.palette_alt : analysis.palette
   const copy = analysis.copy
 
+  // 素材分工建議（image_picks 可能不存在——舊存檔或 AI 沒給時退回通用提示）
+  const picks = analysis.image_picks || {}
+  const pickNote = (i) => (Number.isInteger(i) ? `（AI 建議：用你上傳的第 ${i + 1} 張）` : '')
+
   const titleOptions = copy.main_title_options || []
   const rawTitle =
     String(customMainTitle || '').trim() || titleOptions[mainTitlePick] || titleOptions[0] || '（未填主標題）'
@@ -118,7 +122,7 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
   cards.push({
     slot: 1,
     label: 'Hero 爆款主圖',
-    materialsHint: '商品實拍主圖＋標準版型參考圖（本卡片可下載）',
+    materialsHint: `商品實拍主圖${pickNote(picks.hero)}＋標準版型參考圖（本卡片可下載）`,
     prompt: buildHeroPrompt(product, v),
     textChecklist: [...titleParts.map((t, i) => `主標${i === 0 ? '上行' : '下行'}：${t}`), `副標：${v.SUB}`, `賣點：${v.SP[0].title}`, `情境標語：${v.SLOGAN}`],
   })
@@ -128,7 +132,7 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
     cards.push({
       slot: 2 + i,
       label: `賣點介紹圖 ${i + 1}`,
-      materialsHint: '商品實拍圖（可含這個賣點部位的特寫）',
+      materialsHint: `商品實拍圖，可含這個賣點部位的特寫${pickNote(picks.intro)}`,
       prompt: buildIntroPrompt(sp, v),
       textChecklist: [`賣點主標：${sp.title}`, `說明小字：${sp.desc}`],
     })
@@ -139,7 +143,7 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
     cards.push({
       slot: 5 + i,
       label: `情境圖 ${i + 1}`,
-      materialsHint: '商品實拍圖',
+      materialsHint: `商品實拍圖${pickNote(picks.scene)}`,
       prompt: buildNineScenePrompt(product, scene, SCENE_ANGLES[i]),
       textChecklist: [],
       warning: '本張不應出現任何文字，看到字＝重生',
@@ -151,7 +155,7 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
   cards.push({
     slot: 8,
     label: '尺寸規格圖',
-    materialsHint: '白底商品圖',
+    materialsHint: `白底商品圖${pickNote(picks.spec)}`,
     prompt:
       buildSpecImagePrompt(product, specs) +
       `\n\n【配色呼應】規格表標題與分隔線條使用 ${v.ACCENT} 色，與整套圖視覺呼應；底色維持白底不變。`,
@@ -163,7 +167,7 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
   cards.push({
     slot: 9,
     label: '使用前後比較圖',
-    materialsHint: '商品實拍圖',
+    materialsHint: `商品實拍圖${pickNote(picks.compare)}`,
     prompt: buildComparePrompt(v.BA, v),
     textChecklist: ['小標：使用前', '小標：使用後', `左側文案：${v.BA.before_copy}`, `右側文案：${v.BA.after_copy}`],
   })

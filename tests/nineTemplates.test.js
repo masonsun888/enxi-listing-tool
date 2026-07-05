@@ -65,6 +65,8 @@ const analysis = {
     target_audience: '重視餐具質感的家庭主婦',
   },
   material_check: [{ index: 0, usable: true, issues: [] }],
+  image_picks: { hero: 0, intro: 1, scene: 0, spec: 2, compare: 0, rationale: '第3張白底適合規格圖' },
+  spec_hints: { capacity: '500ml', weight: null, diameter: null, height: '20cm', bottom_width: null },
 }
 
 const product = { brand: '白牌', name: '金色不鏽鋼湯匙', size: '20cm', material: '不鏽鋼', colors: ['金色', '銀色'] }
@@ -161,6 +163,23 @@ test('主標題：預設取第一個候選並拆雙行；customMainTitle 優先'
 
   const c = buildNine(product, specs, analysis, 'main', '', 2)
   assert.ok(c.cards[0].prompt.includes('上行「大湯匙」'))
+})
+
+test('素材分工：各卡片的素材提示帶 AI 建議張數；沒有 image_picks 時退回通用提示', () => {
+  const { cards } = buildNine(product, specs, analysis, 'main')
+  assert.ok(cards[0].materialsHint.includes('第 1 張')) // hero: 0
+  assert.ok(cards[1].materialsHint.includes('第 2 張')) // intro: 1
+  assert.ok(cards[4].materialsHint.includes('第 1 張')) // scene: 0
+  assert.ok(cards[7].materialsHint.includes('第 3 張')) // spec: 2
+  assert.ok(cards[8].materialsHint.includes('第 1 張')) // compare: 0
+
+  // 舊存檔沒有 image_picks → 不炸、提示不含「AI 建議」
+  const legacy = JSON.parse(JSON.stringify(analysis))
+  delete legacy.image_picks
+  const { cards: legacyCards } = buildNine(product, specs, legacy, 'main')
+  for (const c of legacyCards) {
+    assert.ok(!c.materialsHint.includes('AI 建議'))
+  }
 })
 
 test('情境圖：三張場景與構圖角度皆不同、附禁字警語', () => {

@@ -3,7 +3,7 @@
 
 // 模型做成常數方便切換：品質不夠再升 'claude-sonnet-4-6'。
 const MODEL = 'claude-haiku-4-5'
-const MAX_TOKENS = 2500
+const MAX_TOKENS = 3000
 const TEMPERATURE = 0.2
 const MAX_IMAGES = 4
 const ALLOWED_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
@@ -49,9 +49,22 @@ const SYSTEM_PROMPT = `你是「恩希貿易」的電商視覺分析引擎。使
 ## 任務四：素材健檢
 逐張檢查上傳圖片：簡體字、浮水印、他牌 logo 或商標、嚴重低解析或模糊。輸出 material_check 陣列（index 對應上傳順序、usable 布林、issues 字串陣列；無問題給空陣列）。
 
+## 任務五：素材分工建議
+就上傳的圖片（index 對應上傳順序，從 0 開始），建議每一種製圖用哪一張最合適，輸出 image_picks：
+- hero：最適合當主圖素材的一張（商品完整、清晰、角度佳）。
+- intro：最適合做賣點介紹圖的一張（有功能部位細節者優先）。
+- scene：最適合做情境圖的一張（商品乾淨完整者優先）。
+- spec：最適合做規格圖的一張（白底或近白底者優先）。
+- compare：最適合做使用前後比較圖的一張。
+- rationale：一句話說明分工理由。
+只能從 usable 的圖片中挑；沒有合適的該項給 null；只有一張可用圖時全部給該張的 index。
+
+## 任務六：規格轉錄（只抄不猜）
+逐張檢查圖片上「明確可見」的規格文字，輸出 spec_hints：capacity（容量）、weight（重量）、diameter（口徑）、height（高度）、bottom_width（底寬）。只轉錄圖上實際印出的數字與單位、原樣照抄（例：圖上印 500ml 就輸出 "500ml"）；看不清楚或沒有標示就給 null。嚴禁推測、換算或補全。這些值僅供人工核對提示，不會被直接採用。
+
 ## 輸出格式
 嚴格依照以下 JSON 結構輸出（範例值僅示意）：
-{ "product_analysis": { "category": "廚房用品", "product_main_color": { "hex": "#D4AF37", "name": "金色" }, "secondary_colors": [ { "hex": "#3B2F2F", "name": "深咖啡" } ] }, "palette": { "bg_gradient": ["#2C1F14", "#4A3421"], "bg_soft": ["#F5EDE3", "#EFE3D3"], "title_fill": "#FFD700", "title_fill_gradient": ["#FFE066", "#D4A017"], "title_shadow": "#3A2A10", "accent": "#C0392B", "rationale": "金色商品配深咖啡漸層底襯托質感，金黃主標與深底形成強對比" }, "palette_alt": { "bg_gradient": ["#1E3A2F", "#2F5D4A"], "bg_soft": ["#E8F2EC", "#DCEAE1"], "title_fill": "#FFC93C", "title_fill_gradient": null, "title_shadow": "#12241C", "accent": "#E8590C", "rationale": "墨綠底同樣能襯金色，亮黃主標保持跳色" }, "copy": { "main_title_options": ["…｜…", "…｜…", "…｜…"], "sub_title": "…", "hero_slogan": "…！", "selling_points": [ { "title": "…", "desc": "…" }, { "title": "…", "desc": "…" }, { "title": "…", "desc": "…" } ], "scenes": ["…", "…", "…"], "before_after": { "before_scene": "…", "after_scene": "…", "before_copy": "…", "after_copy": "…" }, "target_audience": "…" }, "material_check": [ { "index": 0, "usable": true, "issues": [] } ] }`
+{ "product_analysis": { "category": "廚房用品", "product_main_color": { "hex": "#D4AF37", "name": "金色" }, "secondary_colors": [ { "hex": "#3B2F2F", "name": "深咖啡" } ] }, "palette": { "bg_gradient": ["#2C1F14", "#4A3421"], "bg_soft": ["#F5EDE3", "#EFE3D3"], "title_fill": "#FFD700", "title_fill_gradient": ["#FFE066", "#D4A017"], "title_shadow": "#3A2A10", "accent": "#C0392B", "rationale": "金色商品配深咖啡漸層底襯托質感，金黃主標與深底形成強對比" }, "palette_alt": { "bg_gradient": ["#1E3A2F", "#2F5D4A"], "bg_soft": ["#E8F2EC", "#DCEAE1"], "title_fill": "#FFC93C", "title_fill_gradient": null, "title_shadow": "#12241C", "accent": "#E8590C", "rationale": "墨綠底同樣能襯金色，亮黃主標保持跳色" }, "copy": { "main_title_options": ["…｜…", "…｜…", "…｜…"], "sub_title": "…", "hero_slogan": "…！", "selling_points": [ { "title": "…", "desc": "…" }, { "title": "…", "desc": "…" }, { "title": "…", "desc": "…" } ], "scenes": ["…", "…", "…"], "before_after": { "before_scene": "…", "after_scene": "…", "before_copy": "…", "after_copy": "…" }, "target_audience": "…" }, "material_check": [ { "index": 0, "usable": true, "issues": [] } ], "image_picks": { "hero": 0, "intro": 1, "scene": 0, "spec": 2, "compare": 0, "rationale": "第1張商品最完整，第3張白底適合規格圖" }, "spec_hints": { "capacity": "500ml", "weight": null, "diameter": null, "height": "20cm", "bottom_width": null } }`
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS })
@@ -94,6 +107,31 @@ export function validateAnalysis(a) {
     return false
   if (!Array.isArray(a.material_check)) return false
   return true
+}
+
+// 新增欄位（素材分工、規格提示）採寬鬆處理：缺了或格式怪就補 null，
+// 不列入 validateAnalysis 的必填——避免為了加值功能多花一次重試的錢。
+export function normalizeAnalysis(a) {
+  const idx = (v) => (Number.isInteger(v) && v >= 0 && v < MAX_IMAGES ? v : null)
+  const p = a.image_picks || {}
+  a.image_picks = {
+    hero: idx(p.hero),
+    intro: idx(p.intro),
+    scene: idx(p.scene),
+    spec: idx(p.spec),
+    compare: idx(p.compare),
+    rationale: typeof p.rationale === 'string' ? p.rationale : '',
+  }
+  const s = a.spec_hints || {}
+  const hint = (v) => (isStr(v) ? v : null)
+  a.spec_hints = {
+    capacity: hint(s.capacity),
+    weight: hint(s.weight),
+    diameter: hint(s.diameter),
+    height: hint(s.height),
+    bottom_width: hint(s.bottom_width),
+  }
+  return a
 }
 
 // ===== AI 額度追蹤（存 KV，按台灣時區月份歸戶）=====
@@ -280,7 +318,7 @@ export async function handleAnalyze(request, env) {
   let analysis = null
   try {
     const parsed = parseAnalysisText(raw)
-    if (validateAnalysis(parsed)) analysis = parsed
+    if (validateAnalysis(parsed)) analysis = normalizeAnalysis(parsed)
   } catch {
     // 走下面的重試
   }
@@ -297,7 +335,7 @@ export async function handleAnalyze(request, env) {
       spentInput += retry.inputTokens
       spentOutput += retry.outputTokens
       const parsed = parseAnalysisText(retry.text)
-      if (validateAnalysis(parsed)) analysis = parsed
+      if (validateAnalysis(parsed)) analysis = normalizeAnalysis(parsed)
     } catch {
       // 落到下面的 502
     }

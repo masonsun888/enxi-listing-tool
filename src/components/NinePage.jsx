@@ -8,12 +8,26 @@ const labelCls = 'mb-1 block text-base font-bold text-slate-700'
 const inputCls =
   'w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none'
 
+// [work 欄位, 顯示名, placeholder, spec_hints 對應 key]
 const SPEC_FIELDS = [
-  ['specCapacity', '容量', '例：500ml'],
-  ['specWeight', '重量', '例：280g'],
-  ['specDiameter', '口徑', '例：7cm'],
-  ['specHeight', '高度', '例：20cm'],
-  ['specBottomWidth', '底寬', '例：6.5cm'],
+  ['specCapacity', '容量', '例：500ml', 'capacity'],
+  ['specWeight', '重量', '例：280g', 'weight'],
+  ['specDiameter', '口徑', '例：7cm', 'diameter'],
+  ['specHeight', '高度', '例：20cm', 'height'],
+  ['specBottomWidth', '底寬', '例：6.5cm', 'bottom_width'],
+]
+
+// 「圖上寫 500ml」vs「你填 500 ml」這種只差空白大小寫的不算不一致。
+function normSpec(s) {
+  return String(s).replace(/\s+/g, '').toLowerCase()
+}
+
+const PICK_LABELS = [
+  ['hero', '主圖'],
+  ['intro', '賣點圖'],
+  ['scene', '情境圖'],
+  ['spec', '規格圖'],
+  ['compare', '比較圖'],
 ]
 
 const MAX_ANALYZE_IMAGES = 4
@@ -191,6 +205,16 @@ export default function NinePage({ product, setProduct, work, setWork, password 
   const doneArr = nine && Array.isArray(nine.done) ? nine.done : Array(9).fill(false)
   const doneCount = doneArr.filter(Boolean).length
   const materialCheck = nine && Array.isArray(nine.analysis.material_check) ? nine.analysis.material_check : []
+  const imagePicks = (nine && nine.analysis.image_picks) || {}
+  const specHints = (nine && nine.analysis.spec_hints) || {}
+
+  // 「主圖用第1張、規格圖用第3張」摘要（只在縮圖還在畫面上時顯示，不然第幾張沒得對照）
+  const picksLine =
+    images.length > 0
+      ? PICK_LABELS.filter(([key]) => Number.isInteger(imagePicks[key]))
+          .map(([key, label]) => `${label}用第 ${imagePicks[key] + 1} 張`)
+          .join('、')
+      : ''
 
   function toggleDone(i) {
     const next = [...doneArr]
@@ -258,10 +282,21 @@ export default function NinePage({ product, setProduct, work, setWork, password 
                       ⚠
                     </button>
                   )}
+                  {imagePicks.hero === i && (
+                    <span className="absolute -left-1.5 -top-1.5 rounded-full bg-teal-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      ⭐主圖
+                    </span>
+                  )}
                 </div>
               )
             })}
           </div>
+        )}
+        {picksLine && (
+          <p className="mt-2 rounded-xl bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800">
+            ⭐ AI 素材分工：{picksLine}
+            {imagePicks.rationale ? `。${imagePicks.rationale}` : ''}
+          </p>
         )}
         {issueOpen !== null && imageIssues(issueOpen) && (
           <div className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
@@ -358,18 +393,31 @@ export default function NinePage({ product, setProduct, work, setWork, password 
           <div>
             <label className={labelCls}>規格（有就填，數字會原封不動排進規格圖）</label>
             <div className="grid grid-cols-2 gap-2">
-              {SPEC_FIELDS.map(([key, label, ph]) => (
-                <div key={key}>
-                  <p className="mb-0.5 text-sm font-semibold text-slate-500">{label}</p>
-                  <input
-                    type="text"
-                    value={work[key]}
-                    onChange={(e) => setWorkField(key, e.target.value)}
-                    placeholder={ph}
-                    className={inputCls}
-                  />
-                </div>
-              ))}
+              {SPEC_FIELDS.map(([key, label, ph, hintKey]) => {
+                const hint = specHints[hintKey] || null
+                const val = (work[key] || '').trim()
+                const mismatch = !!(hint && val && normSpec(hint) !== normSpec(val))
+                return (
+                  <div key={key}>
+                    <p className="mb-0.5 text-sm font-semibold text-slate-500">{label}</p>
+                    <input
+                      type="text"
+                      value={work[key]}
+                      onChange={(e) => setWorkField(key, e.target.value)}
+                      placeholder={ph}
+                      className={`${inputCls} ${mismatch ? 'border-amber-400' : ''}`}
+                    />
+                    {hint && !mismatch && (
+                      <p className="mt-0.5 text-xs text-slate-400">👀 圖上寫：{hint}</p>
+                    )}
+                    {mismatch && (
+                      <p className="mt-0.5 text-xs font-bold text-amber-600">
+                        ⚠ 你填「{val}」，圖上寫「{hint}」，出貨前確認一下
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
 

@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validateAnalysis, parseAnalysisText, costTWD, monthKey } from '../worker/analyze.js'
+import {
+  validateAnalysis,
+  parseAnalysisText,
+  normalizeAnalysis,
+  costTWD,
+  monthKey,
+} from '../worker/analyze.js'
 
 function makeValidAnalysis() {
   const palette = {
@@ -57,6 +63,24 @@ test('缺欄位視同失敗', () => {
     mutate(a)
     assert.equal(validateAnalysis(a), false)
   }
+})
+
+test('normalizeAnalysis：新欄位缺漏或格式怪時補 null，不影響驗證通過', () => {
+  // AI 完全沒給新欄位 → 補出完整結構，全 null
+  const a = normalizeAnalysis(makeValidAnalysis())
+  assert.deepEqual(a.image_picks, { hero: null, intro: null, scene: null, spec: null, compare: null, rationale: '' })
+  assert.deepEqual(a.spec_hints, { capacity: null, weight: null, diameter: null, height: null, bottom_width: null })
+
+  // 有給但夾雜怪值 → index 超界/非整數變 null，非字串提示變 null
+  const b = makeValidAnalysis()
+  b.image_picks = { hero: 1, intro: 9, scene: '2', spec: -1, compare: 0, rationale: '第2張最清楚' }
+  b.spec_hints = { capacity: '500ml', weight: 280, height: '', bottom_width: null }
+  normalizeAnalysis(b)
+  assert.deepEqual(b.image_picks, { hero: 1, intro: null, scene: null, spec: null, compare: 0, rationale: '第2張最清楚' })
+  assert.deepEqual(b.spec_hints, { capacity: '500ml', weight: null, diameter: null, height: null, bottom_width: null })
+
+  // 新欄位不列入必填：沒有它們 validateAnalysis 照樣通過
+  assert.equal(validateAnalysis(makeValidAnalysis()), true)
 })
 
 test('costTWD：典型一次分析約 0.6~0.7 元台幣', () => {
