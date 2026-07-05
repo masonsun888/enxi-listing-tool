@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MATERIALS } from '../prompts.js'
 import { buildNine } from '../nineTemplates.js'
-import { compressToJpeg } from '../imageUtils.js'
+import { compressToJpeg, downloadDataUrl } from '../imageUtils.js'
 import NineCard from './NineCard.jsx'
 
 const labelCls = 'mb-1 block text-base font-bold text-slate-700'
@@ -84,6 +84,7 @@ export default function NinePage({ product, setProduct, work, setWork, password 
   const [issueOpen, setIssueOpen] = useState(null) // 點開哪張圖的健檢問題
   const [budget, setBudget] = useState(null) // 本月 AI 額度（/api/usage）
   const fileRef = useRef(null)
+  const cardRefs = useRef([]) // 九張卡片的 DOM，複製後自動捲到下一張
 
   useEffect(() => {
     fetch('/api/usage', { headers: password ? { 'x-app-password': password } : {} })
@@ -122,7 +123,7 @@ export default function NinePage({ product, setProduct, work, setWork, password 
         const { dataUrl, base64 } = await compressToJpeg(f)
         setImages((list) => [...list, { id: `${Date.now()}-${list.length}-${Math.random()}`, thumb: dataUrl, base64 }])
       } catch {
-        setError('有圖片讀取失敗，請換一張再試')
+        setError('這張圖片格式不支援，請換 JPG/PNG（iPhone 照片可先在相簿用「分享」轉成 JPG）')
       }
     }
     if (fileRef.current) fileRef.current.value = ''
@@ -226,6 +227,23 @@ export default function NinePage({ product, setProduct, work, setWork, password 
     updateNine({ optionDone: { ...cur, [color]: !cur[color] } })
   }
 
+  // 複製後：留下持久的「已複製」標記，並自動捲到下一張卡（i 是九張卡的序位；選項圖不捲）
+  const copiedSlots = (nine && nine.copiedSlots) || {}
+  function markCopied(slotKey, i) {
+    updateNine({ copiedSlots: { ...copiedSlots, [slotKey]: true } })
+    if (typeof i === 'number' && cardRefs.current[i + 1]) {
+      setTimeout(() => cardRefs.current[i + 1].scrollIntoView({ behavior: 'smooth', block: 'start' }), 600)
+    }
+  }
+
+  // 卡片的「存素材圖」：AI 建議第幾張、且那張縮圖還在畫面上才給按鈕
+  function materialImageFor(card) {
+    const idx = imagePicks[card.pickKey]
+    if (!Number.isInteger(idx) || !images[idx]) return null
+    const img = images[idx]
+    return { index: idx, download: () => downloadDataUrl(img.thumb, `素材-第${idx + 1}張.jpg`) }
+  }
+
   function imageIssues(index) {
     if (index >= MAX_ANALYZE_IMAGES) return null
     const c = materialCheck.find((m) => m && m.index === index)
@@ -237,6 +255,11 @@ export default function NinePage({ product, setProduct, work, setWork, password 
 
   return (
     <div className="space-y-4">
+      {/* 三步驟：第一天上工也看得懂 */}
+      <div className="rounded-2xl bg-white px-4 py-3 text-center text-sm font-bold text-slate-600 shadow-sm">
+        ① 上傳商品圖　→　② 填資料按按鈕　→　③ 逐張複製貼給 ChatGPT
+      </div>
+
       {/* ① 素材區 */}
       <section className="rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-bold text-slate-800">🖼️ 商品素材</h2>
@@ -321,6 +344,11 @@ export default function NinePage({ product, setProduct, work, setWork, password 
               placeholder="例：316不鏽鋼保溫杯"
               className={inputCls}
             />
+            {product.name.trim().length > 0 && product.name.trim().length < 4 && (
+              <p className="mt-1 text-xs font-semibold text-amber-600">
+                品名越具體，AI 想的標題越準（例：316不鏽鋼加厚湯匙）
+              </p>
+            )}
           </div>
 
           <div>
@@ -368,6 +396,9 @@ export default function NinePage({ product, setProduct, work, setWork, password 
                 新增
               </button>
             </div>
+            {product.colors.length === 0 && (
+              <p className="mt-1 text-xs text-slate-400">不填也可以，只是不會產生「選項圖」。</p>
+            )}
             {product.colors.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {product.colors.map((color) => (
@@ -407,7 +438,19 @@ export default function NinePage({ product, setProduct, work, setWork, password 
                       placeholder={ph}
                       className={`${inputCls} ${mismatch ? 'border-amber-400' : ''}`}
                     />
-                    {hint && !mismatch && (
+                    {hint && !val && (
+                      <p className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
+                        <span>👀 圖上寫：{hint}</span>
+                        <button
+                          type="button"
+                          onClick={() => setWorkField(key, hint)}
+                          className="rounded-full bg-teal-600 px-2.5 py-1 text-xs font-bold text-white active:scale-95"
+                        >
+                          帶入
+                        </button>
+                      </p>
+                    )}
+                    {hint && val && !mismatch && (
                       <p className="mt-0.5 text-xs text-slate-400">👀 圖上寫：{hint}</p>
                     )}
                     {mismatch && (
@@ -509,6 +552,23 @@ export default function NinePage({ product, setProduct, work, setWork, password 
             )}
           </section>
 
+          {/* 怎麼貼給 GPT 小抄（第一次用的人看的，看過就收起來） */}
+          <details className="rounded-2xl bg-white p-4 shadow-sm">
+            <summary className="cursor-pointer text-base font-bold text-slate-700">
+              📖 第一次用？怎麼貼給 ChatGPT（點開看）
+            </summary>
+            <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-slate-600">
+              <li>打開 ChatGPT（手機 App 或網頁），開一個新對話。</li>
+              <li>按卡片上的「📋 複製」，貼到 ChatGPT 的輸入框。</li>
+              <li>
+                再附上圖片一起送出：按卡片的「⬇ 存素材圖」會存到手機，在 ChatGPT 選「最近的照片」就是它。
+                第 1 張 Hero 要多附一張「標準版型參考圖」（卡片上有下載鈕）。
+              </li>
+              <li>圖生出來後，照卡片的「文字核對清單」逐字檢查；有錯字直接回它「有錯字，重生」。</li>
+              <li>這張搞定就勾右上角「完成」，會自動幫你記進度。</li>
+            </ol>
+          </details>
+
           {/* 進度列 */}
           <div className="sticky top-0 z-10 rounded-2xl bg-teal-600 px-4 py-3 text-center text-lg font-extrabold text-white shadow">
             已完成 {doneCount} / 9
@@ -516,13 +576,17 @@ export default function NinePage({ product, setProduct, work, setWork, password 
 
           {/* 九張卡片 */}
           {built.cards.map((card, i) => (
-            <NineCard
-              key={card.slot}
-              card={card}
-              done={!!doneArr[i]}
-              onToggleDone={() => toggleDone(i)}
-              isHero={card.slot === 1}
-            />
+            <div key={card.slot} ref={(el) => (cardRefs.current[i] = el)}>
+              <NineCard
+                card={card}
+                done={!!doneArr[i]}
+                onToggleDone={() => toggleDone(i)}
+                isHero={card.slot === 1}
+                materialImage={materialImageFor(card)}
+                copiedBefore={!!copiedSlots[card.slot]}
+                onCopied={() => markCopied(card.slot, i)}
+              />
+            </div>
           ))}
 
           {/* 選項圖卡片 */}
@@ -538,6 +602,8 @@ export default function NinePage({ product, setProduct, work, setWork, password 
                     done={!!(nine.optionDone && nine.optionDone[color])}
                     onToggleDone={() => toggleOptionDone(color)}
                     isHero={false}
+                    copiedBefore={!!copiedSlots[card.slot]}
+                    onCopied={() => markCopied(card.slot)}
                   />
                 )
               })}
@@ -545,7 +611,7 @@ export default function NinePage({ product, setProduct, work, setWork, password 
           )}
 
           <p className="pb-2 text-center text-sm text-slate-400">
-            做完記得按下方的「💾 儲存此商品」，下次載入不用重新分析。
+            ☁️ 分析結果和進度會自動存檔，之後從下方「已存商品」載入就能接著做。
           </p>
         </>
       )}

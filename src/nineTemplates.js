@@ -121,6 +121,7 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
   // 槽 1｜Hero 爆款主圖
   cards.push({
     slot: 1,
+    pickKey: 'hero',
     label: 'Hero 爆款主圖',
     materialsHint: `商品實拍主圖${pickNote(picks.hero)}＋標準版型參考圖（本卡片可下載）`,
     prompt: buildHeroPrompt(product, v),
@@ -131,6 +132,7 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
   v.SP.forEach((sp, i) => {
     cards.push({
       slot: 2 + i,
+      pickKey: 'intro',
       label: `賣點介紹圖 ${i + 1}`,
       materialsHint: `商品實拍圖，可含這個賣點部位的特寫${pickNote(picks.intro)}`,
       prompt: buildIntroPrompt(sp, v),
@@ -142,6 +144,7 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
   v.SCENES.forEach((scene, i) => {
     cards.push({
       slot: 5 + i,
+      pickKey: 'scene',
       label: `情境圖 ${i + 1}`,
       materialsHint: `商品實拍圖${pickNote(picks.scene)}`,
       prompt: buildNineScenePrompt(product, scene, SCENE_ANGLES[i]),
@@ -154,6 +157,7 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
   const specRows = buildSpecRows(product, specs)
   cards.push({
     slot: 8,
+    pickKey: 'spec',
     label: '尺寸規格圖',
     materialsHint: `白底商品圖${pickNote(picks.spec)}`,
     prompt:
@@ -166,6 +170,7 @@ export function buildNine(product, specs, analysis, palettePick = 'main', custom
   // 槽 9｜比較圖（使用前後）
   cards.push({
     slot: 9,
+    pickKey: 'compare',
     label: '使用前後比較圖',
     materialsHint: `商品實拍圖${pickNote(picks.compare)}`,
     prompt: buildComparePrompt(v.BA, v),

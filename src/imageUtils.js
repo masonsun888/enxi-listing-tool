@@ -46,3 +46,20 @@ export async function compressToJpeg(file, maxEdge = 1024, quality = 0.8) {
   const dataUrl = canvas.toDataURL('image/jpeg', quality)
   return { dataUrl, base64: dataUrl.split(',')[1] }
 }
+
+// 把 dataURL 存成檔案（走 blob URL，手機瀏覽器相容性比直接下載 data: 好）。
+export function downloadDataUrl(dataUrl, filename) {
+  const base64 = dataUrl.split(',')[1]
+  const bin = atob(base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  const blob = new Blob([bytes], { type: 'image/jpeg' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
+}

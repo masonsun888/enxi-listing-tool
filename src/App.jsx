@@ -33,8 +33,11 @@ export default function App() {
   const [tab, setTab] = useState('title')
 
   // 密碼鎖：'checking' | 'open' | 'locked'。後端未設密碼時一律 open。
+  // 密碼記在 localStorage：換分頁、關掉重開都不用重輸（內部工具，方便優先）。
   const [authState, setAuthState] = useState('checking')
-  const [password, setPassword] = useState(() => sessionStorage.getItem(PW_KEY) || '')
+  const [password, setPassword] = useState(
+    () => localStorage.getItem(PW_KEY) || sessionStorage.getItem(PW_KEY) || '',
+  )
 
   useEffect(() => {
     const headers = password ? { 'x-app-password': password } : {}
@@ -47,7 +50,7 @@ export default function App() {
   }, [password])
 
   function unlock(pw) {
-    sessionStorage.setItem(PW_KEY, pw)
+    localStorage.setItem(PW_KEY, pw)
     setPassword(pw)
     setAuthState('checking')
   }
