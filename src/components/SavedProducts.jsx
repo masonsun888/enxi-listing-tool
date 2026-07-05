@@ -71,6 +71,7 @@ export default function SavedProducts({
   currentId,
   setCurrentId,
   password,
+  makeBlankProduct = makeDefaultProduct, // 「＋ 新商品」的空白預設（白牌九圖模式會換成白牌空白）
 }) {
   const [saved, setSaved] = useState([])
   const [mode, setMode] = useState('loading') // loading | cloud | local
@@ -195,7 +196,7 @@ export default function SavedProducts({
   }
 
   function newProduct() {
-    setProduct(makeDefaultProduct())
+    setProduct(makeBlankProduct())
     setWork(makeEmptyWork())
     setCurrentId(null)
     notify('已清空，可建立新商品')
