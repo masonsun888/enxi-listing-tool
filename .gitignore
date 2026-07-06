@@ -8,3 +8,6 @@ yarn-debug.log*
 yarn-error.log*
 .vscode/*
 !.vscode/extensions.json
+
+# 產出的 PDF（交接稿等，source 是同名 .md，不進版控）
+*.pdf
