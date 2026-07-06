@@ -208,10 +208,13 @@ test('賣場定位與爆款強度：九張各有定位句，主圖含強度規�
   assert.ok(cards[4].prompt.includes('賣場的第 5 張'))
   assert.ok(cards[7].prompt.includes('賣場的第 8 張'))
   assert.ok(cards[8].prompt.includes('賣場的第 9 張'))
-  // 爆款強度規則（佬筍 GPT 六要點）
+  // 視覺強度：保留主標張力，但升級質感、砍掉廉價放射線／速度線
   assert.ok(cards[0].prompt.includes('2.5 倍'))
-  assert.ok(cards[0].prompt.includes('20~25%'))
-  assert.ok(cards[0].prompt.includes('放射狀光線'))
+  assert.ok(cards[0].prompt.includes('精緻電商促銷主視覺'))
+  assert.ok(cards[0].prompt.includes('柔焦光暈'))
+  assert.ok(cards[0].prompt.includes('不要放射狀光線'))
+  assert.ok(!cards[0].prompt.includes('加放射狀光線')) // 舊的「加放射狀光線＋速度線」已移除
+  assert.ok(!cards[0].prompt.includes('Sunburst'))
 })
 
 test('情境圖：三張場景與構圖角度皆不同、附禁字警語', () => {
