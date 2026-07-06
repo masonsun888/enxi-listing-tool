@@ -3,6 +3,7 @@
 // 有設定 env.APP_PASSWORD 時，/api 需帶 x-app-password 標頭，否則回 401（前端會跳密碼鎖）。
 
 import { handleAnalyze, buildBudget } from './analyze.js'
+import { handleCopy } from './copy.js'
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' }
 const PREFIX = 'product:'
@@ -36,6 +37,11 @@ async function handleApi(request, env, url) {
   // /api/analyze：白牌九圖的 AI 素材分析（不需要 KV）
   if (url.pathname === '/api/analyze' && request.method === 'POST') {
     return handleAnalyze(request, env)
+  }
+
+  // /api/copy：一鍵上架文案（純文字呼叫，不需要 KV）
+  if (url.pathname === '/api/copy' && request.method === 'POST') {
+    return handleCopy(request, env)
   }
 
   // /api/usage：本月 AI 分析額度（前端進度條用）

@@ -182,6 +182,38 @@ test('素材分工：各卡片的素材提示帶 AI 建議張數；沒有 image_
   }
 })
 
+test('主圖版本：黃/藍/紅只覆蓋第 1 張，內頁八張照用 AI 配色', () => {
+  const y = buildNine(product, specs, analysis, 'main', '', 0, 'yellow')
+  // 主圖用黃底固定色，不再出現 AI 主配色的背景
+  assert.ok(y.cards[0].prompt.includes('#FFD900'))
+  assert.ok(y.cards[0].prompt.includes('黃底爆炸款'))
+  assert.ok(!y.cards[0].prompt.includes(MAIN_HEXES.BG1))
+  // 內頁（介紹圖）仍用 AI 配色
+  assert.ok(y.cards[1].prompt.includes(MAIN_HEXES.BGS1))
+  assert.ok(y.cards[7].prompt.includes(MAIN_HEXES.ACCENT))
+
+  // 預設 ai 版本＝原本的商品錨定配色
+  const a = buildNine(product, specs, analysis, 'main', '', 0, 'ai')
+  assert.ok(a.cards[0].prompt.includes(MAIN_HEXES.BG1))
+  assert.ok(!a.cards[0].prompt.includes('#FFD900'))
+
+  const r = buildNine(product, specs, analysis, 'main', '', 0, 'red')
+  assert.ok(r.cards[0].prompt.includes('紅爆價格款'))
+})
+
+test('賣場定位與爆款強度：九張各有定位句，主圖含強度規則', () => {
+  const { cards } = buildNine(product, specs, analysis, 'main')
+  assert.ok(cards[0].prompt.includes('賣場的第 1 張'))
+  assert.ok(cards[1].prompt.includes('賣場的第 2 張'))
+  assert.ok(cards[4].prompt.includes('賣場的第 5 張'))
+  assert.ok(cards[7].prompt.includes('賣場的第 8 張'))
+  assert.ok(cards[8].prompt.includes('賣場的第 9 張'))
+  // 爆款強度規則（佬筍 GPT 六要點）
+  assert.ok(cards[0].prompt.includes('2.5 倍'))
+  assert.ok(cards[0].prompt.includes('20~25%'))
+  assert.ok(cards[0].prompt.includes('放射狀光線'))
+})
+
 test('情境圖：三張場景與構圖角度皆不同、附禁字警語', () => {
   const { cards } = buildNine(product, specs, analysis, 'main')
   const scenes = cards.slice(4, 7)

@@ -159,7 +159,9 @@ export default function SavedProducts({
   const autoSaveTimer = useRef(null)
   useEffect(() => {
     if (mode === 'loading') return
-    if (!work.nine || !work.nine.analysis) return
+    const hasNine = work.nine && work.nine.analysis
+    const hasCopy = work.nineCopy && work.nineCopy.result
+    if (!hasNine && !hasCopy) return
     if (!product.name.trim()) return
     clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(() => saveCurrent(true), 1500)

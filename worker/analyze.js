@@ -172,7 +172,7 @@ async function readUsageRecord(env) {
   }
 }
 
-async function addUsage(env, inputTokens, outputTokens) {
+export async function addUsage(env, inputTokens, outputTokens) {
   if (!env.PRODUCTS || (!inputTokens && !outputTokens)) return
   try {
     const rec = await readUsageRecord(env)
@@ -225,7 +225,8 @@ function buildUserText(product = {}) {
   ].join('\n')
 }
 
-async function callClaude(env, messages) {
+// 共用的 Anthropic 呼叫：/api/analyze 與 /api/copy 都走這裡（同模型、同記帳邏輯）。
+export async function callClaudeApi(env, { system, messages, maxTokens = MAX_TOKENS }) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -235,9 +236,9 @@ async function callClaude(env, messages) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: MAX_TOKENS,
+      max_tokens: maxTokens,
       temperature: TEMPERATURE,
-      system: SYSTEM_PROMPT,
+      system,
       messages,
     }),
   })
@@ -259,6 +260,10 @@ async function callClaude(env, messages) {
       (usage.cache_read_input_tokens || 0),
     outputTokens: usage.output_tokens || 0,
   }
+}
+
+function callClaude(env, messages) {
+  return callClaudeApi(env, { system: SYSTEM_PROMPT, messages })
 }
 
 export async function handleAnalyze(request, env) {

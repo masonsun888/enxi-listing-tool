@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MATERIALS } from '../prompts.js'
-import { buildNine } from '../nineTemplates.js'
+import { buildNine, HERO_VARIANTS } from '../nineTemplates.js'
 import { compressToJpeg, downloadDataUrl } from '../imageUtils.js'
 import NineCard from './NineCard.jsx'
+import NineCopyCard from './NineCopyCard.jsx'
 
 const labelCls = 'mb-1 block text-base font-bold text-slate-700'
 const inputCls =
@@ -29,6 +30,78 @@ const PICK_LABELS = [
   ['spec', '規格圖'],
   ['compare', '比較圖'],
 ]
+
+// 定價三條線（佬筍公式原封搬過來）：蝦皮+發票 21%、包材 $2、物流 $4，從目標毛利率倒推。
+function priceFromMargin(cost, m) {
+  return Math.round((cost + 6 + cost * m) / 0.79)
+}
+
+const PRICE_LINES = [
+  { m: 0, label: '出清線', desc: '打平就走，淘汰品用', color: 'text-slate-500' },
+  { m: 0.15, label: '警示線', desc: '低於這條要注意', color: 'text-amber-600' },
+  { m: 0.25, label: '建議售價', desc: '預設賣這個', color: 'text-teal-700' },
+  { m: 0.35, label: '獲利線', desc: '理想目標', color: 'text-emerald-600' },
+]
+
+// 定價卡：填成本 → 四條線自動跳；選填「你想賣」→ 即時毛利率。
+function PricingCard({ work, setWorkField, innerRef }) {
+  const cost = parseFloat(work.cost)
+  const hasCost = Number.isFinite(cost) && cost > 0
+  const sell = parseFloat(work.nineSellPrice)
+  const margin =
+    hasCost && Number.isFinite(sell) && sell > 0 ? (sell * 0.79 - cost - 6) / sell : null
+  const marginColor =
+    margin === null ? '' : margin < 0 ? 'text-rose-600' : margin < 0.15 ? 'text-amber-600' : 'text-emerald-600'
+  return (
+    <section ref={innerRef} className="rounded-2xl bg-white p-4 shadow-sm">
+      <h2 className="mb-3 text-lg font-bold text-slate-800">💰 定價（填成本就好）</h2>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <p className="mb-0.5 text-sm font-semibold text-slate-500">進貨成本</p>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={work.cost}
+            onChange={(e) => setWorkField('cost', e.target.value)}
+            placeholder="例：100"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <p className="mb-0.5 text-sm font-semibold text-slate-500">你想賣（選填）</p>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={work.nineSellPrice}
+            onChange={(e) => setWorkField('nineSellPrice', e.target.value)}
+            placeholder="例：199"
+            className={inputCls}
+          />
+        </div>
+      </div>
+      {hasCost && (
+        <div className="mt-3 space-y-1.5">
+          {PRICE_LINES.map((line) => (
+            <div key={line.label} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+              <span className={`text-sm font-bold ${line.color}`}>
+                {line.label}
+                <span className="ml-2 text-xs font-semibold text-slate-400">{line.desc}</span>
+              </span>
+              <span className={`text-lg font-extrabold ${line.color}`}>NT${priceFromMargin(cost, line.m)}</span>
+            </div>
+          ))}
+          {margin !== null && (
+            <p className={`pt-1 text-center text-sm font-bold ${marginColor}`}>
+              賣 NT${sell} 的毛利率約 {(margin * 100).toFixed(1)}%
+              {margin < 0 ? '（虧錢！）' : margin < 0.15 ? '（偏低）' : ''}
+            </p>
+          )}
+          <p className="pt-1 text-xs text-slate-400">已含蝦皮＋發票 21%、包材 $2、物流 $4。</p>
+        </div>
+      )}
+    </section>
+  )
+}
 
 const MAX_ANALYZE_IMAGES = 4
 
@@ -85,6 +158,7 @@ export default function NinePage({ product, setProduct, work, setWork, password 
   const [budget, setBudget] = useState(null) // 本月 AI 額度（/api/usage）
   const fileRef = useRef(null)
   const cardRefs = useRef([]) // 九張卡片的 DOM，複製後自動捲到下一張
+  const secRefs = useRef({}) // 一條龍四區塊的 DOM，頂部導航跳轉用
 
   useEffect(() => {
     fetch('/api/usage', { headers: password ? { 'x-app-password': password } : {} })
@@ -195,7 +269,15 @@ export default function NinePage({ product, setProduct, work, setWork, password 
   const built = useMemo(() => {
     if (!nine) return null
     try {
-      return buildNine(product, specs, nine.analysis, nine.palettePick, nine.customMainTitle, nine.mainTitlePick)
+      return buildNine(
+        product,
+        specs,
+        nine.analysis,
+        nine.palettePick,
+        nine.customMainTitle,
+        nine.mainTitlePick,
+        nine.heroVariant || 'ai',
+      )
     } catch {
       return null // 舊資料格式不完整就當沒有
     }
@@ -253,15 +335,44 @@ export default function NinePage({ product, setProduct, work, setWork, password 
     return issues.length > 0 ? issues : ['AI 判定這張不適合拿去生圖']
   }
 
+  // 一條龍導航：完成的區塊打勾
+  const NAV = [
+    { key: 'input', label: '🖼 素材資料', done: images.length > 0 || !!nine },
+    { key: 'images', label: '🎨 製圖', done: doneCount === 9 },
+    { key: 'copy', label: '📝 文案', done: !!(work.nineCopy && work.nineCopy.result) },
+    { key: 'price', label: '💰 定價', done: !!(work.cost || '').trim() },
+  ]
+  function jumpTo(key) {
+    const el = secRefs.current[key]
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div className="space-y-4">
+      {/* 一條龍導航（黏在頂部） */}
+      <nav className="sticky top-0 z-20 grid grid-cols-4 gap-1.5 rounded-2xl bg-slate-100/95 py-1.5 backdrop-blur">
+        {NAV.map((n) => (
+          <button
+            key={n.key}
+            type="button"
+            onClick={() => jumpTo(n.key)}
+            className={`rounded-xl border-2 py-2 text-xs font-bold active:scale-95 ${
+              n.done ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600'
+            }`}
+          >
+            {n.label}
+            {n.done ? ' ✓' : ''}
+          </button>
+        ))}
+      </nav>
+
       {/* 三步驟：第一天上工也看得懂 */}
       <div className="rounded-2xl bg-white px-4 py-3 text-center text-sm font-bold text-slate-600 shadow-sm">
-        ① 上傳商品圖　→　② 填資料按按鈕　→　③ 逐張複製貼給 ChatGPT
+        ① 上傳商品圖　→　② 填資料按按鈕　→　③ 圖給 ChatGPT、文案直接複製
       </div>
 
       {/* ① 素材區 */}
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
+      <section ref={(el) => (secRefs.current.input = el)} className="rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-bold text-slate-800">🖼️ 商品素材</h2>
         <button
           type="button"
@@ -481,6 +592,7 @@ export default function NinePage({ product, setProduct, work, setWork, password 
       <BudgetBar budget={budget} />
 
       {/* ③ 大按鈕 */}
+      <div ref={(el) => (secRefs.current.images = el)} />
       <button
         type="button"
         onClick={generate}
@@ -522,6 +634,32 @@ export default function NinePage({ product, setProduct, work, setWork, password 
             {pal.rationale && <p className="mt-2 text-sm text-slate-500">{pal.rationale}</p>}
             <p className="mt-1 text-xs text-slate-400">
               目前：{nine.palettePick === 'alt' ? '備選配色' : '主配色'}。換一組會瞬間重組九張指令。
+            </p>
+          </section>
+
+          {/* 主圖版本：佬筍三版爆款 A/B（只換第 1 張主圖的配色與定位，內頁八張不動） */}
+          <section className="rounded-2xl bg-white p-4 shadow-sm">
+            <h2 className="mb-2 text-lg font-bold text-slate-800">🖼 主圖版本（可出多版 A/B 測試）</h2>
+            <div className="grid grid-cols-4 gap-1.5">
+              {HERO_VARIANTS.map((hv) => {
+                const active = (nine.heroVariant || 'ai') === hv.key
+                return (
+                  <button
+                    key={hv.key}
+                    type="button"
+                    onClick={() => updateNine({ heroVariant: hv.key })}
+                    className={`rounded-xl border-2 py-2.5 text-sm font-bold active:scale-95 ${
+                      active ? 'border-teal-500 bg-teal-600 text-white' : 'border-slate-200 bg-white text-slate-600'
+                    }`}
+                  >
+                    {hv.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              {HERO_VARIANTS.find((hv) => hv.key === (nine.heroVariant || 'ai'))?.desc}
+              ——切換只重組第 1 張主圖指令，同商品可以三版都生、上架輪替看哪版點擊高。
             </p>
           </section>
 
@@ -569,8 +707,8 @@ export default function NinePage({ product, setProduct, work, setWork, password 
             </ol>
           </details>
 
-          {/* 進度列 */}
-          <div className="sticky top-0 z-10 rounded-2xl bg-teal-600 px-4 py-3 text-center text-lg font-extrabold text-white shadow">
+          {/* 進度列（黏在一條龍導航下面） */}
+          <div className="sticky top-12 z-10 rounded-2xl bg-teal-600 px-4 py-3 text-center text-lg font-extrabold text-white shadow">
             已完成 {doneCount} / 9
           </div>
 
@@ -610,11 +748,26 @@ export default function NinePage({ product, setProduct, work, setWork, password 
             </>
           )}
 
-          <p className="pb-2 text-center text-sm text-slate-400">
-            ☁️ 分析結果和進度會自動存檔，之後從下方「已存商品」載入就能接著做。
-          </p>
         </>
       )}
+
+      {/* 📝 一鍵上架文案（不用先分析也能用；有分析卡會自動吃它的賣點/客群） */}
+      <NineCopyCard
+        product={product}
+        work={work}
+        setWork={setWork}
+        password={password}
+        setBudget={setBudget}
+        overBudget={overBudget}
+        innerRef={(el) => (secRefs.current.copy = el)}
+      />
+
+      {/* 💰 定價 */}
+      <PricingCard work={work} setWorkField={setWorkField} innerRef={(el) => (secRefs.current.price = el)} />
+
+      <p className="pb-2 text-center text-sm text-slate-400">
+        ☁️ 分析結果、文案和進度會自動存檔，之後從下方「已存商品」載入就能接著做。
+      </p>
     </div>
   )
 }
