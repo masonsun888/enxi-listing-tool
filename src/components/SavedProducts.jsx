@@ -71,6 +71,7 @@ export default function SavedProducts({
   currentId,
   setCurrentId,
   password,
+  makeBlankProduct = makeDefaultProduct, // 「＋ 新商品」的空白預設（白牌九圖模式會換成白牌空白）
 }) {
   const [saved, setSaved] = useState([])
   const [mode, setMode] = useState('loading') // loading | cloud | local
@@ -125,9 +126,10 @@ export default function SavedProducts({
     return rec
   }
 
-  async function saveCurrent() {
+  async function saveCurrent(auto) {
+    const isAuto = auto === true // 按鈕 onClick 會塞 event 進來，嚴格判斷
     if (!product.name.trim()) {
-      notify('請先填品名再儲存')
+      if (!isAuto) notify('請先填品名再儲存')
       return
     }
     const prev = saved.find((s) => s.id === currentId)
@@ -143,13 +145,29 @@ export default function SavedProducts({
       work,
       updatedAt: Date.now(),
     }
-    setBusy(true)
+    if (!isAuto) setBusy(true)
     const result = await persist(record)
-    setBusy(false)
+    if (!isAuto) setBusy(false)
     setCurrentId(result.id)
-    notify(currentId ? '已更新' : '已儲存')
-    setOpen(true)
+    notify(isAuto ? '☁️ 已自動儲存' : currentId ? '已更新' : '已儲存')
+    if (!isAuto) setOpen(true)
   }
+
+  // 白牌九圖自動存檔：只要有分析結果，任何進度變動（勾完成、換配色、改規格…）
+  // 停止輸入 1.5 秒後就自動存，避免員工忘記按儲存把半小時工作弄丟。
+  const workJson = JSON.stringify(work)
+  const autoSaveTimer = useRef(null)
+  useEffect(() => {
+    if (mode === 'loading') return
+    const hasNine = work.nine && work.nine.analysis
+    const hasCopy = work.nineCopy && work.nineCopy.result
+    if (!hasNine && !hasCopy) return
+    if (!product.name.trim()) return
+    clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(() => saveCurrent(true), 1500)
+    return () => clearTimeout(autoSaveTimer.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workJson, mode])
 
   function loadItem(item) {
     setProduct({
@@ -195,7 +213,7 @@ export default function SavedProducts({
   }
 
   function newProduct() {
-    setProduct(makeDefaultProduct())
+    setProduct(makeBlankProduct())
     setWork(makeEmptyWork())
     setCurrentId(null)
     notify('已清空，可建立新商品')
@@ -241,7 +259,7 @@ export default function SavedProducts({
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          onClick={saveCurrent}
+          onClick={() => saveCurrent(false)}
           disabled={busy}
           className="rounded-xl bg-teal-600 py-3 text-lg font-bold text-white active:scale-[0.97] disabled:opacity-50"
         >

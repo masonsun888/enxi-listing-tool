@@ -234,8 +234,8 @@ function buildLocknlockOfficialPrompt(product, { sellingPoints = '', mainTitle =
 【品牌】在畫面上方放上乾淨的「樂扣樂扣 LocknLock」標準字（純文字、不使用 logo 圖案），低調、專業、有官方信任感。${textBlock}`
 }
 
-// 規格圖（AI 製圖）：丟白底圖，自動把規格排上去。specs = {capacity, weight, diameter, height, bottomWidth}
-function buildSpecImagePrompt(product, specs = {}) {
+// 規格條列（人填數字原樣輸出）：規格圖 prompt 與白牌九圖的核對清單共用。
+export function buildSpecRows(product, specs = {}) {
   const rows = []
   if (product.name) rows.push(`品名：${product.name}`)
   if (specs.capacity && specs.capacity.trim()) rows.push(`容量：${specs.capacity.trim()}`)
@@ -243,6 +243,12 @@ function buildSpecImagePrompt(product, specs = {}) {
   if (specs.diameter && specs.diameter.trim()) rows.push(`口徑：${specs.diameter.trim()}`)
   if (specs.height && specs.height.trim()) rows.push(`高度：${specs.height.trim()}`)
   if (specs.bottomWidth && specs.bottomWidth.trim()) rows.push(`底部寬度：${specs.bottomWidth.trim()}`)
+  return rows
+}
+
+// 規格圖（AI 製圖）：丟白底圖，自動把規格排上去。specs = {capacity, weight, diameter, height, bottomWidth}
+export function buildSpecImagePrompt(product, specs = {}) {
+  const rows = buildSpecRows(product, specs)
   const specList = rows.length > 0 ? rows.join('\n') : '（尚未填寫規格，請先在上方填好）'
 
   return `以我上傳的「白底商品圖」為準，完整保留商品原樣（不重畫、不變形、不更動顏色），製作乾淨專業的電商「商品規格圖」。
