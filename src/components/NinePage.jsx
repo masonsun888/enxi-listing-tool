@@ -601,6 +601,7 @@ export default function NinePage({ product, setProduct, work, setWork, password 
               placeholder="留空 AI 幫你想"
               className={inputCls}
             />
+            <p className="mt-1 text-xs text-slate-400">越短越有力，建議 6–10 字；太長泡泡藝術字會擠、張力被稀釋。</p>
           </div>
         </div>
       </section>
@@ -635,23 +636,71 @@ export default function NinePage({ product, setProduct, work, setWork, password 
           <section className="space-y-4 rounded-2xl bg-white p-4 shadow-sm">
             <div>
               <h2 className="text-lg font-bold text-slate-800">🎯 這套圖的策略（勾一次，全部套用）</h2>
-              <p className="mt-0.5 text-xs text-slate-400">配色、排版、質感交給 GPT 發揮，你只挑「要主打什麼」。</p>
+              <p className="mt-0.5 text-xs text-slate-400">已幫你預設選好，覺得怪再改即可。配色、排版、質感交給 GPT，你只挑「要主打什麼」。</p>
             </div>
 
-            {/* 主賣點 */}
+            {/* 主賣點（主） */}
             <ChipRow
               title="主打賣點"
               hint="畫面要圍繞這件事"
               options={(nine.analysis.copy.selling_points || []).map((sp) => sp.title)}
               activeIdx={choices.sellingPointPick ?? 0}
-              onPick={(i) => updateChoice({ sellingPointPick: i })}
+              onPick={(i) =>
+                updateChoice({
+                  sellingPointPick: i,
+                  ...(choices.secondarySellingPick === i ? { secondarySellingPick: undefined } : {}),
+                })
+              }
             />
+
+            {/* 次要賣點（選填）：凸顯主次，主圖會補一句「◯◯ 是次要」 */}
+            {(() => {
+              const sps = nine.analysis.copy.selling_points || []
+              const mainIdx = choices.sellingPointPick ?? 0
+              const others = sps.map((sp, i) => ({ title: sp.title, i })).filter((o) => o.i !== mainIdx)
+              if (others.length === 0) return null
+              const picked =
+                Number.isInteger(choices.secondarySellingPick) && choices.secondarySellingPick !== mainIdx
+                  ? choices.secondarySellingPick
+                  : others[0].i
+              const effIdx = choices.noSecondary ? null : picked
+              return (
+                <div>
+                  <p className="mb-1 text-sm font-bold text-slate-700">
+                    次要賣點<span className="ml-1 text-xs font-normal text-slate-400">選填，主圖會補一句「◯◯ 是次要」</span>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {others.map((o) => (
+                      <button
+                        key={o.i}
+                        type="button"
+                        onClick={() => updateChoice({ secondarySellingPick: o.i, noSecondary: false })}
+                        className={`rounded-full px-3.5 py-1.5 text-sm font-bold active:scale-95 ${
+                          effIdx === o.i ? 'bg-teal-600 text-white' : 'border-2 border-slate-200 bg-white text-slate-600'
+                        }`}
+                      >
+                        {o.title}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => updateChoice({ noSecondary: true })}
+                      className={`rounded-full px-3.5 py-1.5 text-sm font-bold active:scale-95 ${
+                        choices.noSecondary ? 'bg-slate-600 text-white' : 'border-2 border-slate-200 bg-white text-slate-400'
+                      }`}
+                    >
+                      不強調次要
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* 主標題 */}
             <div>
               <ChipRow
                 title="主標題"
-                hint="點一個，或到上方欄位自己打"
+                hint="越短越有力，建議 6–10 字（或到上方欄位自己打）"
                 options={nine.analysis.copy.main_title_options || []}
                 activeIdx={(choices.customMainTitle || '').trim() ? -1 : choices.mainTitlePick ?? 0}
                 onPick={(i) => updateChoice({ mainTitlePick: i, customMainTitle: '' })}
