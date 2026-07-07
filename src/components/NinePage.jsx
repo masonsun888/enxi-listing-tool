@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MATERIALS } from '../prompts.js'
-import { buildNine, HERO_VARIANTS } from '../nineTemplates.js'
+import { buildNine, TONE_OPTIONS, TA_PRESETS } from '../nineTemplates.js'
 import { compressToJpeg, downloadDataUrl } from '../imageUtils.js'
 import NineCard from './NineCard.jsx'
 import NineCopyCard from './NineCopyCard.jsx'
@@ -133,21 +133,33 @@ function BudgetBar({ budget }) {
   )
 }
 
-// 配色卡上的一格色塊
-function Swatch({ colors, label }) {
-  const style =
-    colors.length > 1
-      ? { background: `linear-gradient(90deg, ${colors[0]}, ${colors[1]})` }
-      : { background: colors[0] }
+// 策略勾選卡的一列（chips + 選填自填框）
+function ChipRow({ title, hint, options, activeIdx, onPick }) {
   return (
-    <div className="flex-1 text-center">
-      <div className="h-12 w-full rounded-xl border border-black/10" style={style} />
-      <p className="mt-1 text-xs font-semibold text-slate-500">{label}</p>
+    <div>
+      <p className="mb-1 text-sm font-bold text-slate-700">
+        {title}
+        {hint && <span className="ml-1 text-xs font-normal text-slate-400">{hint}</span>}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onPick(i)}
+            className={`rounded-full px-3.5 py-1.5 text-sm font-bold active:scale-95 ${
+              activeIdx === i ? 'bg-teal-600 text-white' : 'border-2 border-slate-200 bg-white text-slate-600'
+            }`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
 
-// 白牌九圖：上傳素材＋填規格 → 一顆按鈕 → 九張配色連貫的製圖 prompt 工作單。
+// 白牌九圖 v2：上傳素材＋填規格 → 勾一次策略 → 八張＋選項圖的製圖 prompt 工作單（配色交給 GPT）。
 export default function NinePage({ product, setProduct, work, setWork, password }) {
   const [images, setImages] = useState([]) // { id, thumb, base64 }（只留在記憶體，不存檔）
   const [analyzing, setAnalyzing] = useState(false)
@@ -182,10 +194,16 @@ export default function NinePage({ product, setProduct, work, setWork, password 
   const setWorkField = (k, v) => setWork((w) => ({ ...w, [k]: v }))
   const setProductField = (k, v) => setProduct((p) => ({ ...p, [k]: v }))
 
-  // 主標題輸入：產生後綁 work.nine.customMainTitle（會存檔），產生前綁本地草稿。
-  const customTitle = nine ? nine.customMainTitle || '' : titleDraft
+  // 策略勾選（v2）：一次勾選貫穿全部圖。舊存檔沒有 choices 就用預設空物件。
+  const choices = (nine && nine.choices) || {}
+  function updateChoice(patch) {
+    updateNine({ choices: { ...choices, ...patch } })
+  }
+
+  // 主標題輸入：產生後綁 choices.customMainTitle（會存檔），產生前綁本地草稿。
+  const customTitle = nine ? choices.customMainTitle || '' : titleDraft
   function setCustomTitle(v) {
-    if (nine) updateNine({ customMainTitle: v })
+    if (nine) updateChoice({ customMainTitle: v, mainTitlePick: undefined })
     else setTitleDraft(v)
   }
 
@@ -251,11 +269,18 @@ export default function NinePage({ product, setProduct, work, setWork, password 
         ...w,
         nine: {
           analysis: data.analysis,
-          palettePick: 'main',
-          customMainTitle: (nine ? nine.customMainTitle : titleDraft) || '',
-          mainTitlePick: 0,
-          done: Array(9).fill(false),
+          choices: {
+            sellingPointPick: 0,
+            mainTitlePick: 0,
+            customMainTitle: (nine ? choices.customMainTitle : titleDraft) || '',
+            taPick: '',
+            keyActionPick: 0,
+            customKeyAction: '',
+            toneOverride: '',
+          },
+          done: [],
           optionDone: {},
+          copiedSlots: {},
         },
       }))
     } catch (err) {
@@ -265,27 +290,19 @@ export default function NinePage({ product, setProduct, work, setWork, password 
     }
   }
 
-  // 九張卡片：純函式重組，換配色／換主標都是零 API 呼叫。
+  // 卡片：純函式重組，換策略勾選都是零 API 呼叫。
   const built = useMemo(() => {
     if (!nine) return null
     try {
-      return buildNine(
-        product,
-        specs,
-        nine.analysis,
-        nine.palettePick,
-        nine.customMainTitle,
-        nine.mainTitlePick,
-        nine.heroVariant || 'ai',
-      )
+      return buildNine(product, specs, nine.analysis, nine.choices || {})
     } catch {
       return null // 舊資料格式不完整就當沒有
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nine, product, work.specCapacity, work.specWeight, work.specDiameter, work.specHeight, work.specBottomWidth])
 
-  const pal = nine ? (nine.palettePick === 'alt' ? nine.analysis.palette_alt : nine.analysis.palette) : null
-  const doneArr = nine && Array.isArray(nine.done) ? nine.done : Array(9).fill(false)
+  const totalCards = built ? built.cards.length : 0
+  const doneArr = built ? built.cards.map((_, i) => !!(nine.done && nine.done[i])) : []
   const doneCount = doneArr.filter(Boolean).length
   const materialCheck = nine && Array.isArray(nine.analysis.material_check) ? nine.analysis.material_check : []
   const imagePicks = (nine && nine.analysis.image_picks) || {}
@@ -300,7 +317,7 @@ export default function NinePage({ product, setProduct, work, setWork, password 
       : ''
 
   function toggleDone(i) {
-    const next = [...doneArr]
+    const next = Array.isArray(nine.done) ? [...nine.done] : []
     next[i] = !next[i]
     updateNine({ done: next })
   }
@@ -338,7 +355,7 @@ export default function NinePage({ product, setProduct, work, setWork, password 
   // 一條龍導航：完成的區塊打勾
   const NAV = [
     { key: 'input', label: '🖼 素材資料', done: images.length > 0 || !!nine },
-    { key: 'images', label: '🎨 製圖', done: doneCount === 9 },
+    { key: 'images', label: '🎨 製圖', done: totalCards > 0 && doneCount === totalCards },
     { key: 'copy', label: '📝 文案', done: !!(work.nineCopy && work.nineCopy.result) },
     { key: 'price', label: '💰 定價', done: !!(work.cost || '').trim() },
   ]
@@ -612,82 +629,104 @@ export default function NinePage({ product, setProduct, work, setWork, password 
       {error && <p className="text-center text-sm font-bold text-rose-600">{error}</p>}
 
       {/* ===== 產生後：同頁往下長出 ===== */}
-      {nine && built && pal && (
+      {nine && built && (
         <>
-          {/* 配色卡 */}
-          <section className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-800">🎨 這套圖的配色</h2>
-              <button
-                type="button"
-                onClick={() => updateNine({ palettePick: nine.palettePick === 'alt' ? 'main' : 'alt' })}
-                className="rounded-xl border-2 border-teal-500 px-3 py-2 text-sm font-bold text-teal-700 active:scale-95"
-              >
-                🔄 換一組
-              </button>
+          {/* 策略勾選卡：勾一次，貫穿全部圖。配色/排版交給 GPT，工具只給策略。 */}
+          <section className="space-y-4 rounded-2xl bg-white p-4 shadow-sm">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">🎯 這套圖的策略（勾一次，全部套用）</h2>
+              <p className="mt-0.5 text-xs text-slate-400">配色、排版、質感交給 GPT 發揮，你只挑「要主打什麼」。</p>
             </div>
-            <div className="mt-3 flex gap-2">
-              <Swatch colors={pal.bg_gradient} label="背景漸層" />
-              <Swatch colors={[pal.title_fill]} label="主標色" />
-              <Swatch colors={[pal.accent]} label="強調色" />
-            </div>
-            {pal.rationale && <p className="mt-2 text-sm text-slate-500">{pal.rationale}</p>}
-            <p className="mt-1 text-xs text-slate-400">
-              目前：{nine.palettePick === 'alt' ? '備選配色' : '主配色'}。換一組會瞬間重組九張指令。
-            </p>
-          </section>
 
-          {/* 主圖版本：佬筍三版爆款 A/B（只換第 1 張主圖的配色與定位，內頁八張不動） */}
-          <section className="rounded-2xl bg-white p-4 shadow-sm">
-            <h2 className="mb-2 text-lg font-bold text-slate-800">🖼 主圖版本（可出多版 A/B 測試）</h2>
-            <div className="grid grid-cols-4 gap-1.5">
-              {HERO_VARIANTS.map((hv) => {
-                const active = (nine.heroVariant || 'ai') === hv.key
-                return (
-                  <button
-                    key={hv.key}
-                    type="button"
-                    onClick={() => updateNine({ heroVariant: hv.key })}
-                    className={`rounded-xl border-2 py-2.5 text-sm font-bold active:scale-95 ${
-                      active ? 'border-teal-500 bg-teal-600 text-white' : 'border-slate-200 bg-white text-slate-600'
-                    }`}
-                  >
-                    {hv.label}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="mt-2 text-xs text-slate-400">
-              {HERO_VARIANTS.find((hv) => hv.key === (nine.heroVariant || 'ai'))?.desc}
-              ——切換只重組第 1 張主圖指令，同商品可以三版都生、上架輪替看哪版點擊高。
-            </p>
-          </section>
+            {/* 主賣點 */}
+            <ChipRow
+              title="主打賣點"
+              hint="畫面要圍繞這件事"
+              options={(nine.analysis.copy.selling_points || []).map((sp) => sp.title)}
+              activeIdx={choices.sellingPointPick ?? 0}
+              onPick={(i) => updateChoice({ sellingPointPick: i })}
+            />
 
-          {/* 主標候選 */}
-          <section className="rounded-2xl bg-white p-4 shadow-sm">
-            <h2 className="mb-2 text-lg font-bold text-slate-800">✏️ 主標題（點一個套用）</h2>
-            <div className="flex flex-wrap gap-2">
-              {nine.analysis.copy.main_title_options.map((opt, i) => {
-                const active = !(nine.customMainTitle || '').trim() && nine.mainTitlePick === i
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => updateNine({ mainTitlePick: i, customMainTitle: '' })}
-                    className={`rounded-full px-4 py-2 text-base font-bold active:scale-95 ${
-                      active ? 'bg-teal-600 text-white' : 'border-2 border-slate-200 bg-white text-slate-600'
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                )
-              })}
+            {/* 主標題 */}
+            <div>
+              <ChipRow
+                title="主標題"
+                hint="點一個，或到上方欄位自己打"
+                options={nine.analysis.copy.main_title_options || []}
+                activeIdx={(choices.customMainTitle || '').trim() ? -1 : choices.mainTitlePick ?? 0}
+                onPick={(i) => updateChoice({ mainTitlePick: i, customMainTitle: '' })}
+              />
+              {(choices.customMainTitle || '').trim() && (
+                <p className="mt-1 text-xs font-semibold text-teal-700">
+                  目前用你自己打的：{choices.customMainTitle}（清空上方主標題欄可改回候選）
+                </p>
+              )}
             </div>
-            {(nine.customMainTitle || '').trim() && (
-              <p className="mt-2 text-sm font-semibold text-teal-700">
-                目前用你自己打的：{nine.customMainTitle}（清空上方輸入框可改回候選）
+
+            {/* 關鍵動作 */}
+            <div>
+              <p className="mb-1 text-sm font-bold text-slate-700">
+                主圖關鍵動作<span className="ml-1 text-xs font-normal text-slate-400">主圖要有的那個畫面</span>
               </p>
-            )}
+              <div className="flex flex-wrap gap-2">
+                {(nine.analysis.copy.key_action_options || []).map((opt, i) => {
+                  const active = !(choices.customKeyAction || '').trim() && (choices.keyActionPick ?? 0) === i
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => updateChoice({ keyActionPick: i, customKeyAction: '' })}
+                      className={`rounded-full px-3.5 py-1.5 text-sm font-bold active:scale-95 ${
+                        active ? 'bg-teal-600 text-white' : 'border-2 border-slate-200 bg-white text-slate-600'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  )
+                })}
+              </div>
+              <input
+                type="text"
+                value={choices.customKeyAction || ''}
+                onChange={(e) => updateChoice({ customKeyAction: e.target.value })}
+                placeholder="也可以自己打，例：手擠壓、冰塊掉出"
+                className={`${inputCls} mt-2`}
+              />
+            </div>
+
+            {/* TA 受眾 + 調性 */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-sm font-bold text-slate-700">賣給誰</p>
+                <select
+                  value={choices.taPick || ''}
+                  onChange={(e) => updateChoice({ taPick: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">AI 判定：{nine.analysis.copy.target_audience || '一般消費者'}</option>
+                  {TA_PRESETS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-bold text-slate-700">整體調性<span className="ml-1 text-xs font-normal text-slate-400">九張的連貫感</span></p>
+                <select
+                  value={choices.toneOverride || ''}
+                  onChange={(e) => updateChoice({ toneOverride: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">自動：{built.tone}</option>
+                  {TONE_OPTIONS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </section>
 
           {/* 怎麼貼給 GPT 小抄（第一次用的人看的，看過就收起來） */}
@@ -709,7 +748,10 @@ export default function NinePage({ product, setProduct, work, setWork, password 
 
           {/* 進度列（黏在一條龍導航下面） */}
           <div className="sticky top-12 z-10 rounded-2xl bg-teal-600 px-4 py-3 text-center text-lg font-extrabold text-white shadow">
-            已完成 {doneCount} / 9
+            已完成 {doneCount} / {totalCards}
+          </div>
+          <div className="rounded-2xl bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-700">
+            🔥 主圖／規格圖最重要，值得多花力氣重生到滿意；🌊 中間幾張「充門面、能看即可」，別卡太久。
           </div>
 
           {/* 九張卡片 */}
