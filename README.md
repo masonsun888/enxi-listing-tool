@@ -63,7 +63,7 @@ npm test         # 單元測試（模板引擎 + analyze schema 驗證）
 ## 白牌九圖上線前置（一次性）
 
 1. `wrangler secret put ANTHROPIC_API_KEY` — 沒設的話 `/api/analyze` 回 503，前端會提示「後台尚未設定 AI 金鑰」。
-2. 挑 1 張最會賣的爆款成品當「標準版型參考圖」，放到 `public/assets/hero-ref-1.jpg`（Hero 卡片的下載鈕會抓這個路徑）。
+2. 挑 1 張最會賣的爆款成品當「標準版型參考圖」，放到 `public/assets/hero-ref-1.png`（Hero 卡片的下載鈕會抓這個路徑）。
 3. 手動打 API 驗證：`./scripts/test-analyze.sh https://你的網址 ./某張商品圖.jpg [密碼]`。
 
 ## 部署（Cloudflare Pages）

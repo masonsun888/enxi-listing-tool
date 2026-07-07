@@ -76,8 +76,8 @@ export default function NineCard({ card, done, onToggleDone, isHero, materialIma
 
       {isHero && (
         <a
-          href="/assets/hero-ref-1.jpg"
-          download="hero-ref-1.jpg"
+          href="/assets/hero-ref-1.png"
+          download="hero-ref-1.png"
           className="mt-2 block rounded-xl border-2 border-teal-200 bg-teal-50 px-3 py-2.5 text-center text-base font-bold text-teal-700 active:scale-[0.98]"
         >
           ⬇ 下載標準版型參考圖
