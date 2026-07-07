@@ -62,9 +62,12 @@ const SYSTEM_PROMPT = `你是「恩希貿易」的電商視覺分析引擎。使
 ## 任務六：規格轉錄（只抄不猜）
 逐張檢查圖片上「明確可見」的規格文字，輸出 spec_hints：capacity（容量）、weight（重量）、diameter（口徑）、height（高度）、bottom_width（底寬）。只轉錄圖上實際印出的數字與單位、原樣照抄（例：圖上印 500ml 就輸出 "500ml"）；看不清楚或沒有標示就給 null。嚴禁推測、換算或補全。這些值僅供人工核對提示，不會被直接採用。
 
+## 任務七：關鍵動作（主圖最該有的那個畫面）
+主圖要爆，關鍵常在「最能體現賣點的那個動作瞬間」，而不是靜態擺放。輸出 copy.key_action_options：3 個候選，各 ≤10 字，描述「最能體現這個商品核心賣點的動作瞬間」。例：製冰盒 → ["手擠壓、冰塊掉出", "倒扣脫模", "捏一捏的療癒感"]；保溫杯 → ["單手一鍵彈蓋", "倒滿熱水冒煙", "手握展示防燙"]。要具體、有畫面感、扣住主賣點。
+
 ## 輸出格式
 嚴格依照以下 JSON 結構輸出（範例值僅示意）：
-{ "product_analysis": { "category": "廚房用品", "product_main_color": { "hex": "#D4AF37", "name": "金色" }, "secondary_colors": [ { "hex": "#3B2F2F", "name": "深咖啡" } ] }, "palette": { "bg_gradient": ["#2C1F14", "#4A3421"], "bg_soft": ["#F5EDE3", "#EFE3D3"], "title_fill": "#FFD700", "title_fill_gradient": ["#FFE066", "#D4A017"], "title_shadow": "#3A2A10", "accent": "#C0392B", "rationale": "金色商品配深咖啡漸層底襯托質感，金黃主標與深底形成強對比" }, "palette_alt": { "bg_gradient": ["#1E3A2F", "#2F5D4A"], "bg_soft": ["#E8F2EC", "#DCEAE1"], "title_fill": "#FFC93C", "title_fill_gradient": null, "title_shadow": "#12241C", "accent": "#E8590C", "rationale": "墨綠底同樣能襯金色，亮黃主標保持跳色" }, "copy": { "main_title_options": ["…｜…", "…｜…", "…｜…"], "sub_title": "…", "hero_slogan": "…！", "selling_points": [ { "title": "…", "desc": "…" }, { "title": "…", "desc": "…" }, { "title": "…", "desc": "…" } ], "scenes": ["…", "…", "…"], "before_after": { "before_scene": "…", "after_scene": "…", "before_copy": "…", "after_copy": "…" }, "target_audience": "…" }, "material_check": [ { "index": 0, "usable": true, "issues": [] } ], "image_picks": { "hero": 0, "intro": 1, "scene": 0, "spec": 2, "compare": 0, "rationale": "第1張商品最完整，第3張白底適合規格圖" }, "spec_hints": { "capacity": "500ml", "weight": null, "diameter": null, "height": "20cm", "bottom_width": null } }`
+{ "product_analysis": { "category": "廚房用品", "product_main_color": { "hex": "#D4AF37", "name": "金色" }, "secondary_colors": [ { "hex": "#3B2F2F", "name": "深咖啡" } ] }, "palette": { "bg_gradient": ["#2C1F14", "#4A3421"], "bg_soft": ["#F5EDE3", "#EFE3D3"], "title_fill": "#FFD700", "title_fill_gradient": ["#FFE066", "#D4A017"], "title_shadow": "#3A2A10", "accent": "#C0392B", "rationale": "金色商品配深咖啡漸層底襯托質感，金黃主標與深底形成強對比" }, "palette_alt": { "bg_gradient": ["#1E3A2F", "#2F5D4A"], "bg_soft": ["#E8F2EC", "#DCEAE1"], "title_fill": "#FFC93C", "title_fill_gradient": null, "title_shadow": "#12241C", "accent": "#E8590C", "rationale": "墨綠底同樣能襯金色，亮黃主標保持跳色" }, "copy": { "main_title_options": ["…｜…", "…｜…", "…｜…"], "sub_title": "…", "hero_slogan": "…！", "selling_points": [ { "title": "…", "desc": "…" }, { "title": "…", "desc": "…" }, { "title": "…", "desc": "…" } ], "scenes": ["…", "…", "…"], "before_after": { "before_scene": "…", "after_scene": "…", "before_copy": "…", "after_copy": "…" }, "target_audience": "…", "key_action_options": ["…", "…", "…"] }, "material_check": [ { "index": 0, "usable": true, "issues": [] } ], "image_picks": { "hero": 0, "intro": 1, "scene": 0, "spec": 2, "compare": 0, "rationale": "第1張商品最完整，第3張白底適合規格圖" }, "spec_hints": { "capacity": "500ml", "weight": null, "diameter": null, "height": "20cm", "bottom_width": null } }`
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS })
@@ -131,6 +134,11 @@ export function normalizeAnalysis(a) {
     height: hint(s.height),
     bottom_width: hint(s.bottom_width),
   }
+  // 關鍵動作候選（copy.key_action_options）：寬鬆補正，缺了給空陣列，前端退回純自填。
+  a.copy = a.copy || {}
+  a.copy.key_action_options = Array.isArray(a.copy.key_action_options)
+    ? a.copy.key_action_options.filter(isStr).slice(0, 3)
+    : []
   return a
 }
 

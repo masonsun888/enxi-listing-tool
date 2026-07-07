@@ -35,6 +35,12 @@ export default function NineCard({ card, done, onToggleDone, isHero, materialIma
             {typeof card.slot === 'number' ? `${card.slot}｜` : ''}
             {card.label}
           </span>
+          {card.tier === 'core' && (
+            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-600">🔥 最重要</span>
+          )}
+          {card.tier === 'fill' && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-400">🌊 充門面</span>
+          )}
           {copiedBefore && !done && (
             <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-700">已複製</span>
           )}
@@ -53,6 +59,10 @@ export default function NineCard({ card, done, onToggleDone, isHero, materialIma
       <p className="mt-2 rounded-xl bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800">
         📎 這張要給 GPT 的素材：{card.materialsHint}
       </p>
+
+      {card.chainNote && (
+        <p className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-sm font-bold text-rose-600">{card.chainNote}</p>
+      )}
 
       {materialImage && (
         <button
