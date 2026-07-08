@@ -1,5 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { checkTitle, checkMessages, checkIntro, introMessages, TITLE_MAX } from '../titleCheck.js'
+import { compressToJpeg, downloadDataUrl } from '../imageUtils.js'
+import { buildNine, TA_PRESETS, TONE_OPTIONS } from '../nineTemplates.js'
+import { setActiveVariant, daysSince, shouldRemindAB, statusLabel, VARIANT_STATUS } from '../heroVariants.js'
 
 // 優化舊品：給在售品局部補強。PR-A-fix：卡1 改成「單次 AI 直出 2–3 個完整標題」，
 // 選字規則全在後端，員工只做：貼競品 →（選填）填必埋詞 → 挑一個標題（可直接編輯）。
@@ -19,6 +22,24 @@ const EMPTY = {
   introResults: [],
   introAux: [],
   introShownIdx: 0,
+  heroAnalysis: null,
+  heroChoices: {},
+  hero: { variants: [] },
+}
+
+// 酒紅 token 的勾選 chip
+function Chip({ label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3.5 py-1.5 text-sm font-bold active:scale-95 ${
+        active ? 'bg-primary text-white' : 'border border-line bg-surface text-muted'
+      }`}
+    >
+      {label}
+    </button>
+  )
 }
 
 // 收合式卡片外殼
@@ -51,6 +72,12 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
   const [copiedIdx, setCopiedIdx] = useState(-1)
   const [copiedIntroIdx, setCopiedIntroIdx] = useState(-1)
   const [mustDraft, setMustDraft] = useState('')
+  // 卡3 Hero
+  const [heroImages, setHeroImages] = useState([]) // {id, thumb, base64}（只在記憶體）
+  const [heroAnalyzing, setHeroAnalyzing] = useState(false)
+  const [heroError, setHeroError] = useState('')
+  const [heroCopied, setHeroCopied] = useState(false)
+  const heroFileRef = useRef(null)
 
   function update(patch) {
     setWork((w) => ({ ...w, optimize: { ...(w.optimize || EMPTY), ...patch } }))
@@ -137,6 +164,101 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
       setCopiedIntroIdx(i)
       setTimeout(() => setCopiedIntroIdx(-1), 1800)
     }
+  }
+
+  // ===== 卡3 Hero 重製 =====
+  const heroAnalysis = opt.heroAnalysis || null
+  const heroChoices = opt.heroChoices || {}
+  const heroVariants = (opt.hero && opt.hero.variants) || []
+  function updateHeroChoice(patch) {
+    update({ heroChoices: { ...heroChoices, ...patch } })
+  }
+  // 復用九圖引擎：Hero 卡就是 buildNine 的第一張（specs 用不到給空物件）。
+  let heroBuilt = null
+  try {
+    if (heroAnalysis) heroBuilt = buildNine(product, {}, heroAnalysis, heroChoices)
+  } catch {
+    heroBuilt = null
+  }
+  const heroCard = heroBuilt ? heroBuilt.cards[0] : null
+
+  async function onHeroFiles(e) {
+    const files = Array.from(e.target.files || [])
+    setHeroError('')
+    for (const f of files) {
+      try {
+        const { dataUrl, base64 } = await compressToJpeg(f)
+        setHeroImages((list) => [...list, { id: `${list.length}-${Math.random()}`, thumb: dataUrl, base64 }])
+      } catch {
+        setHeroError('這張圖片格式不支援，請換 JPG/PNG')
+      }
+    }
+    if (heroFileRef.current) heroFileRef.current.value = ''
+  }
+
+  async function analyzeHero() {
+    if (heroImages.length === 0 || heroAnalyzing || overBudget || !hasName) return
+    setHeroError('')
+    setHeroAnalyzing(true)
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(password ? { 'x-app-password': password } : {}) },
+        body: JSON.stringify({
+          product: { name: product.name, material: product.material, colors: product.colors, size: product.size },
+          images: heroImages.slice(0, 4).map((img) => ({ media_type: 'image/jpeg', data: img.base64 })),
+        }),
+      })
+      if (res.status === 503) throw new Error('後台尚未設定 AI 金鑰')
+      if (res.status === 429) {
+        const d = await res.json().catch(() => ({}))
+        if (d.budget) setBudget(d.budget)
+        throw new Error(d.error || '本月 AI 額度已用完')
+      }
+      const data = await res.json()
+      if (data.budget) setBudget(data.budget)
+      if (!res.ok || !data.analysis) throw new Error(data.error || 'AI 忙線中，再按一次')
+      update({
+        heroAnalysis: data.analysis,
+        heroChoices: { sellingPointPick: 0, mainTitlePick: 0, keyActionPick: 0, taPick: '', toneOverride: '' },
+      })
+    } catch (err) {
+      setHeroError(String(err && err.message ? err.message : err))
+    } finally {
+      setHeroAnalyzing(false)
+    }
+  }
+
+  async function copyHero() {
+    if (!heroCard) return
+    await copyText(heroCard.prompt, 'hero', 0)
+    setHeroCopied(true)
+    setTimeout(() => setHeroCopied(false), 1800)
+  }
+
+  function saveVariant() {
+    if (!heroCard) return
+    const snapshot = [
+      heroBuilt.cards[0].textChecklist[0] || '',
+      `賣點：${(heroAnalysis.copy.selling_points || [])[heroChoices.sellingPointPick ?? 0]?.title || ''}`,
+    ]
+      .filter(Boolean)
+      .join('｜')
+    const id = (crypto.randomUUID && crypto.randomUUID()) || `v-${heroVariants.length}-${Math.random()}`
+    const variant = {
+      id,
+      prompt: heroCard.prompt,
+      strategySnapshot: snapshot,
+      status: heroVariants.length === 0 ? VARIANT_STATUS.LIVE : VARIANT_STATUS.TESTING,
+      createdAt: Date.now(),
+    }
+    update({ hero: { variants: [variant, ...heroVariants] } })
+  }
+  function makeLive(id) {
+    update({ hero: { variants: setActiveVariant(heroVariants, id) } })
+  }
+  function removeVariant(id) {
+    update({ hero: { variants: heroVariants.filter((v) => v.id !== id) } })
   }
 
   async function copyTitle(title, i) {
@@ -447,15 +569,222 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
         )}
       </Card>
 
-      {/* 卡3：Hero 重製（PR-C） */}
+      {/* 卡3：Hero 單張重製（複用九圖五句 Hero＋A/B 版本） */}
       <Card
         icon="🖼"
         title="Hero 單張重製"
-        subtitle="複用九圖五句 Hero＋A/B 版本"
-        open={false}
-        onToggle={() => {}}
-        disabled
-      />
+        subtitle="上傳圖 → AI 分析 → 五句 Hero → 存 A/B 版本"
+        open={openCard === 3}
+        onToggle={() => setOpenCard(openCard === 3 ? 0 : 3)}
+      >
+        {!hasName && (
+          <p className="mb-3 rounded-[8px] bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700">
+            先在左側選一個已存商品，或新建並填「品名」。
+          </p>
+        )}
+        {shouldRemindAB(heroVariants) && (
+          <p className="mb-3 rounded-[8px] bg-accent/15 px-3 py-2 text-sm font-bold text-ink">
+            📅 現役 Hero 上架超過兩週了，考慮重產一張打擂台比成效。
+          </p>
+        )}
+
+        {/* 上傳素材 */}
+        <button
+          type="button"
+          onClick={() => heroFileRef.current && heroFileRef.current.click()}
+          className="w-full rounded-[8px] border-2 border-dashed border-line bg-bg/40 py-6 text-base font-bold text-muted active:scale-[0.99]"
+        >
+          ＋ 上傳商品實拍圖（可多張）
+        </button>
+        <input ref={heroFileRef} type="file" accept="image/*" multiple onChange={onHeroFiles} className="hidden" />
+        {heroImages.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {heroImages.map((img) => (
+              <img key={img.id} src={img.thumb} alt="素材" className="h-16 w-16 rounded-[8px] border border-line object-cover" />
+            ))}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={analyzeHero}
+          disabled={heroImages.length === 0 || heroAnalyzing || overBudget || !hasName}
+          className="mt-3 w-full rounded-[8px] bg-primary py-3 text-lg font-bold text-white transition active:scale-[0.98] disabled:opacity-40"
+        >
+          {heroAnalyzing ? '🤖 AI 分析中…' : heroAnalysis ? '🔁 重新分析' : '🤖 AI 分析商品（產五要素）'}
+        </button>
+        <p className="mt-1 text-center text-xs text-muted">按一次老闆掏一次錢（約 NT$0.5）💰</p>
+        {heroError && <p className="mt-2 text-center text-sm font-bold text-rose-600">{heroError}</p>}
+
+        {/* 五要素策略（分析後出現） */}
+        {heroAnalysis && heroCard && (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm font-bold text-ink">這張 Hero 的策略（勾一次，覺得怪再改）</p>
+
+            <div>
+              <p className="mb-1 text-sm font-bold text-ink">主打賣點</p>
+              <div className="flex flex-wrap gap-2">
+                {(heroAnalysis.copy.selling_points || []).map((sp, i) => (
+                  <Chip
+                    key={i}
+                    label={sp.title}
+                    active={(heroChoices.sellingPointPick ?? 0) === i}
+                    onClick={() => updateHeroChoice({ sellingPointPick: i })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-sm font-bold text-ink">
+                主標題<span className="ml-1 text-xs font-normal text-muted">越短越有力</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(heroAnalysis.copy.main_title_options || []).map((t, i) => (
+                  <Chip
+                    key={i}
+                    label={t}
+                    active={!(heroChoices.customMainTitle || '').trim() && (heroChoices.mainTitlePick ?? 0) === i}
+                    onClick={() => updateHeroChoice({ mainTitlePick: i, customMainTitle: '' })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-sm font-bold text-ink">
+                主圖關鍵動作<span className="ml-1 text-xs font-normal text-muted">要有的那個畫面</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(heroAnalysis.copy.key_action_options || []).map((opt2, i) => (
+                  <Chip
+                    key={i}
+                    label={opt2}
+                    active={!(heroChoices.customKeyAction || '').trim() && (heroChoices.keyActionPick ?? 0) === i}
+                    onClick={() => updateHeroChoice({ keyActionPick: i, customKeyAction: '' })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-sm font-bold text-ink">賣給誰</p>
+                <select
+                  value={heroChoices.taPick || ''}
+                  onChange={(e) => updateHeroChoice({ taPick: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">AI 判定：{heroAnalysis.copy.target_audience || '一般消費者'}</option>
+                  {TA_PRESETS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <p className="mb-1 text-sm font-bold text-ink">整體調性</p>
+                <select
+                  value={heroChoices.toneOverride || ''}
+                  onChange={(e) => updateHeroChoice({ toneOverride: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">自動：{heroBuilt.tone}</option>
+                  {TONE_OPTIONS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Hero prompt */}
+            <div className="rounded-[8px] border border-line p-3">
+              <p className="mb-1 text-sm font-bold text-ink">Hero 製圖指令（貼給 GPT）</p>
+              <textarea
+                readOnly
+                rows={11}
+                value={heroCard.prompt}
+                className="w-full resize-none rounded-[8px] border border-line bg-bg/40 p-2.5 text-sm leading-relaxed text-ink focus:outline-none"
+              />
+              <a
+                href="/assets/hero-ref-1.png"
+                download="hero-ref-1.png"
+                className="mt-2 block rounded-[8px] border border-line bg-surface px-3 py-2 text-center text-sm font-bold text-ink active:scale-[0.98]"
+              >
+                ⬇ 下載標準版型參考圖（貼 GPT 時附上）
+              </a>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={copyHero}
+                  className={`flex-1 rounded-[8px] py-2.5 text-base font-bold text-white transition active:scale-[0.98] ${
+                    heroCopied ? 'bg-emerald-500' : 'bg-ink'
+                  }`}
+                >
+                  {heroCopied ? '✅ 已複製' : '📋 複製指令'}
+                </button>
+                <button
+                  type="button"
+                  onClick={saveVariant}
+                  className="shrink-0 rounded-[8px] border border-primary px-4 py-2.5 text-base font-bold text-primary active:scale-95"
+                >
+                  💾 存成版本
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* A/B 版本列表 */}
+        {heroVariants.length > 0 && (
+          <div className="mt-4">
+            <p className="mb-2 text-sm font-bold text-ink">A/B 版本（{heroVariants.length}）</p>
+            <div className="space-y-2">
+              {heroVariants.map((v) => {
+                const d = daysSince(v.createdAt)
+                return (
+                  <div
+                    key={v.id}
+                    className={`rounded-[8px] border p-3 ${
+                      v.status === VARIANT_STATUS.LIVE ? 'border-primary bg-primary/5' : 'border-line'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-bold text-ink">
+                        {statusLabel(v.status)}
+                        {d !== null && <span className="ml-2 font-mono text-xs font-normal text-muted">上架 {d} 天</span>}
+                      </span>
+                      <span className="flex shrink-0 gap-1.5">
+                        {v.status !== VARIANT_STATUS.LIVE && (
+                          <button
+                            type="button"
+                            onClick={() => makeLive(v.id)}
+                            className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-white active:scale-95"
+                          >
+                            設為現役
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeVariant(v.id)}
+                          className="rounded-full border border-line px-3 py-1 text-xs font-bold text-muted active:scale-95"
+                        >
+                          刪
+                        </button>
+                      </span>
+                    </div>
+                    {v.strategySnapshot && <p className="mt-1 truncate text-xs text-muted">{v.strategySnapshot}</p>}
+                  </div>
+                )
+              })}
+            </div>
+            <p className="mt-2 text-xs text-muted">上架 1–2 週後產新版打擂台；哪版贏由你看蝦皮後台自己標「設為現役」。</p>
+          </div>
+        )}
+      </Card>
     </div>
   )
 }

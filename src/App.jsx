@@ -19,9 +19,9 @@ const TABS = [
 ]
 
 const MODES = [
-  { key: 'nine', label: '⚡ 新品九圖' },
-  { key: 'optimize', label: '🔧 優化舊品' },
   { key: 'classic', label: '🗂 經典模式' },
+  { key: 'optimize', label: '🔧 優化舊品' },
+  { key: 'nine', label: '⚡ 新品九圖' },
 ]
 
 const PW_KEY = 'enxi_pw'
