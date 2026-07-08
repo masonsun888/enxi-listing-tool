@@ -71,7 +71,7 @@ export default function SavedProducts({
   currentId,
   setCurrentId,
   password,
-  makeBlankProduct = makeDefaultProduct, // 「＋ 新商品」的空白預設（白牌九圖模式會換成白牌空白）
+  makeBlankProduct = makeDefaultProduct, // 「＋ 新商品」的空白預設（新品九圖模式會換成白牌空白）
 }) {
   const [saved, setSaved] = useState([])
   const [mode, setMode] = useState('loading') // loading | cloud | local
@@ -153,7 +153,7 @@ export default function SavedProducts({
     if (!isAuto) setOpen(true)
   }
 
-  // 白牌九圖自動存檔：只要有分析結果，任何進度變動（勾完成、換配色、改規格…）
+  // 新品九圖自動存檔：只要有分析結果，任何進度變動（勾完成、換配色、改規格…）
   // 停止輸入 1.5 秒後就自動存，避免員工忘記按儲存把半小時工作弄丟。
   const workJson = JSON.stringify(work)
   const autoSaveTimer = useRef(null)

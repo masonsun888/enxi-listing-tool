@@ -159,7 +159,7 @@ function ChipRow({ title, hint, options, activeIdx, onPick }) {
   )
 }
 
-// 白牌九圖 v2：上傳素材＋填規格 → 勾一次策略 → 八張＋選項圖的製圖 prompt 工作單（配色交給 GPT）。
+// 新品九圖 v2：上傳素材＋填規格 → 勾一次策略 → 八張＋選項圖的製圖 prompt 工作單（配色交給 GPT）。
 export default function NinePage({ product, setProduct, work, setWork, password }) {
   const [images, setImages] = useState([]) // { id, thumb, base64 }（只留在記憶體，不存檔）
   const [analyzing, setAnalyzing] = useState(false)

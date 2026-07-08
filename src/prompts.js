@@ -234,7 +234,7 @@ function buildLocknlockOfficialPrompt(product, { sellingPoints = '', mainTitle =
 【品牌】在畫面上方放上乾淨的「樂扣樂扣 LocknLock」標準字（純文字、不使用 logo 圖案），低調、專業、有官方信任感。${textBlock}`
 }
 
-// 規格條列（人填數字原樣輸出）：規格圖 prompt 與白牌九圖的核對清單共用。
+// 規格條列（人填數字原樣輸出）：規格圖 prompt 與新品九圖的核對清單共用。
 export function buildSpecRows(product, specs = {}) {
   const rows = []
   if (product.name) rows.push(`品名：${product.name}`)

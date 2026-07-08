@@ -18,14 +18,14 @@ const TABS = [
 ]
 
 const MODES = [
-  { key: 'nine', label: '⚡ 白牌九圖' },
+  { key: 'nine', label: '⚡ 新品九圖' },
   { key: 'classic', label: '🗂 經典模式' },
 ]
 
 const PW_KEY = 'enxi_pw'
 
 export default function App() {
-  // 白牌九圖為預設；經典模式＝原有四分頁工作流（樂扣、珍珠照舊）。
+  // 新品九圖為預設；經典模式＝原有四分頁工作流（樂扣、珍珠照舊）。
   const [mode, setMode] = useState('nine')
   const [product, setProduct] = useState(makeNineDefaultProduct)
   const [work, setWork] = useState(makeEmptyWork)

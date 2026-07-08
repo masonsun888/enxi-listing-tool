@@ -7,7 +7,7 @@ export const makeDefaultProduct = () => ({
   colors: [],
 })
 
-// 白牌九圖模式的空白商品：固定白牌、品名留白給員工填。
+// 新品九圖模式的空白商品：固定白牌、品名留白給員工填。
 export const makeNineDefaultProduct = () => ({
   brand: '白牌',
   name: '',
@@ -31,7 +31,7 @@ export const makeEmptyWork = () => ({
   specDiameter: '',
   specHeight: '',
   specBottomWidth: '',
-  // 白牌九圖：{ analysis, palettePick, customMainTitle, mainTitlePick, heroVariant, done[9], optionDone, copiedSlots }
+  // 新品九圖：{ analysis, palettePick, customMainTitle, mainTitlePick, heroVariant, done[9], optionDone, copiedSlots }
   nine: null,
   // 白牌一鍵上架文案：{ mainKeyword, competitorTitles, result, checks }
   nineCopy: null,
