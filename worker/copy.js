@@ -2,13 +2,17 @@
 // 員工拿到的是「可直接貼上蝦皮的成品」，不再需要複製 prompt 去 GPT。
 // 純文字呼叫（不傳圖），一次約 NT$0.3~0.5，與 /api/analyze 共用額度記帳與月上限。
 import { callClaudeApi, addUsage, buildBudget, parseAnalysisText } from './analyze.js'
+import { normalizeTitles, blacklistHits, coverageDedup, countIndependent, isFromTitles } from './keywords.js'
 
 const COPY_MAX_TOKENS = 2000
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' }
 
-// 蝦皮標題字數上限（D2 拍板；日後蝦皮放寬只改這一個常數）。主關鍵字須落在前 MAIN_KW_FRONT 字內。
+// 蝦皮標題字數（D2 拍板；日後蝦皮放寬只改這裡）。優化標題塞 50–60 字、主關鍵字須落在前 MAIN_KW_FRONT 字內。
 export const TITLE_MAX = 60
+export const TITLE_MIN = 50
 export const MAIN_KW_FRONT = 10
+const MUST_INCLUDE_MAX = 4
+const REPAIR_LIMIT = 2 // 品檢不過的重修上限
 
 // 禁字黑名單（措辭優化階段再跟 Mason 一起調）
 export const FORBIDDEN_WORDS = [
@@ -49,18 +53,27 @@ const COPY_SYSTEM_PROMPT = `你是「恩希貿易」的蝦皮上架文案引擎�
 【輸出 JSON 結構】
 { "shopee_title": "…", "golden_intro": "…", "pain_points": ["😩 …", "🙌 …"], "spec_lines": ["材質：…"], "aftersale": ["【包裹的小保險｜…】…", "【拆禮物的小儀式｜…】…", "【關於完美主義｜…】…"], "hashtags": ["#…"] }`
 
-// 優化舊品·卡1：只優化「標題」，吃 keywords{main,aux} 產 2–3 個候選。
-const OPTIMIZE_TITLE_SYSTEM_PROMPT = `你是蝦皮標題優化引擎。根據商品資料、指定的「主關鍵字」與「輔助關鍵字」，產出 2–3 個優化後的蝦皮標題候選。
+// 優化舊品·卡1：單次呼叫完成「萃取→分類→選字→組標題」，回 titles + rationale（選字依據）。
+const OPTIMIZE_TITLE_SYSTEM_PROMPT = `你是蝦皮標題優化引擎。使用者會給商品品名、（選填）現有標題、多條競品標題、（選填）必埋詞。你要「一次」完成：從競品標題萃取關鍵字 → 分類 → 選字 → 組出 2–3 個「塞好塞滿」的優化標題。
 
-【硬規則】
-- 每個標題 ≤ ${TITLE_MAX} 字元（中文 1 字＝1 字元，含空格）。
-- 主關鍵字必須放在標題「最前面」（前 ${MAIN_KW_FRONT} 字內）。
-- 每個輔助關鍵字都要完整出現在標題中。
-- 其餘用高搜尋量的品類／屬性詞把標題填到接近上限，但要通順、像真人下的標題，不是關鍵字亂堆。
-- 禁字（一個都不准出現）：${FORBIDDEN_WORDS.join('、')}。
-- 不放品牌名、賣場名、活動網址；不編造規格、材質、認證。
+【萃取與分類】把競品標題出現過的詞分四類：品類詞、屬性詞、場景詞、服務詞。
 
-只輸出合法 JSON（不要 markdown 圍欄、不要解說）：{ "titles": ["候選1", "候選2", "候選3"] }`
+【選字規則】
+1. 主關鍵字＝競品標題中「獨立出現次數最高的品類詞」，放每個標題最前面（前 ${MAIN_KW_FRONT} 字內）。
+2. 長複合詞優先＋涵蓋去重：若「陶瓷保溫瓶」入選，就不要再單獨放它的子字串「保溫瓶」佔字數。
+3. 屬性詞／場景詞補搜尋面，優先於品類變體填入後段。
+4. 服務詞（現貨／免運／隔日到貨／SGS／贈品…）只能用使用者「必埋詞」給的；你不得自行添加任何承諾類服務詞。必埋詞每一個都必須出現在每一個候選標題中。
+
+【組裝】每個標題塞到 ${TITLE_MIN}–${TITLE_MAX} 字（中文 1 字＝1 元）；後段是關鍵字倉庫、用「空格」分隔堆疊；不強制任何框號【】符號；同一個詞最多出現 2 次；通順可讀、別堆到不能唸。
+
+【紅線】
+- 只萃取競品原文出現過的詞（必埋詞除外）。
+- 絕對不出現任何品牌名（他牌一律不准，包括競品裡的品牌）。
+- 不編造規格／材質／認證。
+- 禁字（一個都不准）：${FORBIDDEN_WORDS.join('、')}。
+
+只輸出合法 JSON（不要 markdown 圍欄、不要解說）：
+{ "titles": ["候選1", "候選2", "候選3"], "rationale": { "main": "主品類詞", "picked": [{ "keyword": "詞", "type": "品類|屬性|場景|服務", "count": 次數 }], "excluded": [{ "keyword": "詞", "reason": "他牌品牌詞|被涵蓋|與本品無關" }] } }`
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS })
@@ -85,23 +98,42 @@ function startsWithin(title, kw, n) {
   return false
 }
 
-// 優化標題的程式品檢（前端即時顯示、後端重修判斷共用）。
+// 某詞在標題出現幾次
+function occurrences(t, kw) {
+  if (!kw) return 0
+  return t.split(kw).length - 1
+}
+
+// 優化標題的程式品檢（前後端同一套規則；前端 src/titleCheck.js 是同值鏡像供即時品檢）。
+// keywords = { main, mustInclude:[] }
 export function buildTitleChecks(title, keywords = {}) {
   const t = String(title || '')
   const main = String(keywords.main || '').trim()
-  const aux = (Array.isArray(keywords.aux) ? keywords.aux : []).map((s) => String(s || '').trim()).filter(Boolean)
+  const must = (Array.isArray(keywords.mustInclude) ? keywords.mustInclude : []).map((s) => String(s || '').trim()).filter(Boolean)
+  const len = titleLen(t)
   return {
-    len: titleLen(t),
-    over: titleLen(t) > TITLE_MAX,
+    len,
+    tooShort: len < TITLE_MIN,
+    over: len > TITLE_MAX,
     mainFirst: main ? startsWithin(t, main, MAIN_KW_FRONT) : null,
-    auxMissing: aux.filter((k) => !t.includes(k)),
+    mustMissing: must.filter((k) => !t.includes(k)),
+    blacklistHits: blacklistHits(t),
     forbiddenHits: FORBIDDEN_WORDS.filter((w) => t.includes(w)),
+    repeats: [main, ...must].filter((k) => k && occurrences(t, k) > 2),
   }
 }
 
-// 標題候選是否過關（全不過關就觸發後端重修一次）。
+// 標題候選是否過關（有不過關的就觸發後端重修，上限 REPAIR_LIMIT 次）。
 function titleOk(c) {
-  return !c.over && c.mainFirst !== false && c.auxMissing.length === 0 && c.forbiddenHits.length === 0
+  return (
+    !c.tooShort &&
+    !c.over &&
+    c.mainFirst !== false &&
+    c.mustMissing.length === 0 &&
+    c.blacklistHits.length === 0 &&
+    c.forbiddenHits.length === 0 &&
+    c.repeats.length === 0
+  )
 }
 
 export function validateCopy(c) {
@@ -250,31 +282,70 @@ export async function handleCopy(request, env) {
   })
 }
 
-function buildTitleUserText(body, main, aux) {
-  const p = body.product || {}
+function buildTitleUserText(body, competitors, mustInclude) {
   const lines = [
-    '【商品基本資料】',
-    `品名：${p.name || '（未填）'}`,
-    `材質：${p.material || '（未填）'}`,
+    '【商品品名】' + (isStr(body.productName) ? body.productName : '（未填）'),
   ]
-  if (isStr(body.currentTitle)) lines.push(`現有標題（可參考、可改進）：${body.currentTitle}`)
-  lines.push('', `【主關鍵字（放最前面）】${main}`, `【輔助關鍵字（每個都要出現）】${aux.join('、') || '（無）'}`)
+  if (isStr(body.currentTitle)) lines.push('【現有標題（可參考、可改進）】' + body.currentTitle)
+  lines.push('', '【競品標題（一行一條）】')
+  competitors.forEach((t, i) => lines.push(`${i + 1}. ${t}`))
+  lines.push('', `【必埋詞（每個候選都必須出現；沒有就當作無服務詞）】${mustInclude.join('、') || '（無）'}`)
   return lines.join('\n')
 }
 
-function parseTitles(raw) {
+function parseTitleResult(raw) {
   const p = parseAnalysisText(raw)
-  return p && Array.isArray(p.titles) ? p.titles.filter(isStr).slice(0, 3) : []
+  const titles = p && Array.isArray(p.titles) ? p.titles.filter(isStr).slice(0, 3) : []
+  const rationale = p && p.rationale && typeof p.rationale === 'object' ? p.rationale : null
+  return { titles, rationale }
 }
 
-// 優化舊品·卡1：產優化標題。keywords.main 必填；回 { titles, titleChecks }，全不過關重修一次。
-async function handleOptimizeTitle(env, body) {
-  const kw = body.keywords || {}
-  const main = String(kw.main || '').trim()
-  const aux = (Array.isArray(kw.aux) ? kw.aux : []).map((s) => String(s || '').trim()).filter(Boolean).slice(0, 3)
-  if (!main) return json({ error: '缺少主關鍵字' }, 400)
+// 後端重算 rationale：不信 AI 自報的計次。picked 過 substring 鐵律＋涵蓋去重＋獨立計次；
+// excluded 併入命中黑名單的詞。
+function sanitizeRationale(rationale, competitors) {
+  const r = rationale || {}
+  const rawPicked = Array.isArray(r.picked) ? r.picked : []
+  // 只留「競品原文出現過」且「非品牌黑名單」的詞
+  const validWords = rawPicked
+    .map((x) => (x && isStr(x.keyword) ? x.keyword.trim() : ''))
+    .filter((k) => k && isFromTitles(k, competitors) && blacklistHits(k).length === 0)
+  const kept = coverageDedup(validWords)
+  const typeOf = {}
+  for (const x of rawPicked) if (x && isStr(x.keyword)) typeOf[x.keyword.trim()] = x.type || ''
+  const picked = kept.map((k) => ({ keyword: k, type: typeOf[k] || '', count: countIndependent(k, competitors, kept) }))
+  picked.sort((a, b) => b.count - a.count)
 
-  const userText = buildTitleUserText(body, main, aux)
+  const excluded = []
+  const seen = new Set()
+  const pushExcluded = (keyword, reason) => {
+    const k = String(keyword || '').trim()
+    if (k && !seen.has(k)) {
+      seen.add(k)
+      excluded.push({ keyword: k, reason })
+    }
+  }
+  for (const x of Array.isArray(r.excluded) ? r.excluded : []) {
+    if (x && isStr(x.keyword)) pushExcluded(x.keyword, x.reason || '與本品無關')
+  }
+  // AI 若把品牌詞放進 picked，強制改列 excluded
+  for (const x of rawPicked) {
+    if (x && isStr(x.keyword) && blacklistHits(x.keyword).length > 0) pushExcluded(x.keyword, '他牌品牌詞')
+  }
+
+  const main = isStr(r.main) && isFromTitles(r.main.trim(), competitors) ? r.main.trim() : picked[0] ? picked[0].keyword : ''
+  return { main, picked, excluded }
+}
+
+// 優化舊品·卡1：單次呼叫直出 2–3 個完整標題＋選字依據；品檢不過自動重修（上限 REPAIR_LIMIT 次）。
+async function handleOptimizeTitle(env, body) {
+  const competitors = normalizeTitles(body.competitorTitles)
+  if (competitors.length === 0) return json({ error: '缺少競品標題（一行貼一條）' }, 400)
+  const mustInclude = (Array.isArray(body.mustInclude) ? body.mustInclude : [])
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+    .slice(0, MUST_INCLUDE_MAX)
+
+  const userText = buildTitleUserText(body, competitors, mustInclude)
   let spentInput = 0
   let spentOutput = 0
   async function call(messages) {
@@ -284,39 +355,51 @@ async function handleOptimizeTitle(env, body) {
     return r.text
   }
 
-  let titles
+  let titles = []
+  let rationale = null
+  const messages = [{ role: 'user', content: userText }]
   try {
-    titles = parseTitles(await call([{ role: 'user', content: userText }]))
+    const first = await call(messages)
+    const parsed = parseTitleResult(first)
+    titles = parsed.titles
+    rationale = parsed.rationale
+    messages.push({ role: 'assistant', content: first })
   } catch (err) {
     await addUsage(env, spentInput, spentOutput)
     return json({ error: 'AI 產標題失敗：' + String(err && err.message ? err.message : err) }, 502)
   }
 
-  // 全部候選都不過關 → 帶著上次結果要求重修一次。
-  const allBad = titles.length === 0 || titles.every((t) => !titleOk(buildTitleChecks(t, { main, aux })))
-  if (allBad) {
+  const main = rationale && isStr(rationale.main) ? rationale.main.trim() : ''
+  const checkAll = (arr) => arr.map((t) => buildTitleChecks(t, { main, mustInclude }))
+
+  // 品檢不過就重修，最多 REPAIR_LIMIT 次。
+  let tries = 0
+  while (tries < REPAIR_LIMIT && (titles.length === 0 || checkAll(titles).some((c) => !titleOk(c)))) {
+    tries += 1
     try {
-      const retry = parseTitles(
-        await call([
-          { role: 'user', content: userText },
-          { role: 'assistant', content: JSON.stringify({ titles }) },
-          {
-            role: 'user',
-            content: `上一版標題不合格。請重出 2–3 個：每個 ≤${TITLE_MAX} 字元、主關鍵字「${main}」放最前面（前 ${MAIN_KW_FRONT} 字內）、每個輔助關鍵字（${aux.join('、') || '無'}）都要出現、無禁字。只輸出 {"titles":[...]}。`,
-          },
-        ]),
-      )
-      if (retry.length) titles = retry
+      messages.push({
+        role: 'user',
+        content: `上一版有標題不合格。請重出 2–3 個，每個都符合：${TITLE_MIN}–${TITLE_MAX} 字、主關鍵字放前 ${MAIN_KW_FRONT} 字內、必埋詞（${mustInclude.join('、') || '無'}）全部出現、無任何品牌名、無禁字、同一詞不超過 2 次。只輸出原本的 JSON 結構（titles＋rationale）。`,
+      })
+      const retryRaw = await call(messages)
+      const parsed = parseTitleResult(retryRaw)
+      if (parsed.titles.length) {
+        titles = parsed.titles
+        if (parsed.rationale) rationale = parsed.rationale
+      }
+      messages.push({ role: 'assistant', content: retryRaw })
     } catch {
-      // 沿用第一次結果
+      break // 沿用上一版
     }
   }
 
   await addUsage(env, spentInput, spentOutput)
   if (titles.length === 0) return json({ error: 'AI 忙線中，再按一次', budget: await buildBudget(env) }, 502)
+  const finalMain = rationale && isStr(rationale.main) ? rationale.main.trim() : main
   return json({
     titles,
-    titleChecks: titles.map((t) => buildTitleChecks(t, { main, aux })),
+    titleChecks: titles.map((t) => buildTitleChecks(t, { main: finalMain, mustInclude })),
+    rationale: sanitizeRationale(rationale, competitors),
     budget: await buildBudget(env),
   })
 }

@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { checkTitle, checkMessages, TITLE_MAX } from '../titleCheck.js'
 
-// 優化舊品：給在售品局部補強。PR-A 只做卡1（標題關鍵字優化）；卡2/卡3 佔位，PR-B/PR-C 上線。
-// 全部走新設計 token（酒紅 primary／霧金 accent／line 框）。
+// 優化舊品：給在售品局部補強。PR-A-fix：卡1 改成「單次 AI 直出 2–3 個完整標題」，
+// 選字規則全在後端，員工只做：貼競品 →（選填）填必埋詞 → 挑一個標題（可直接編輯）。
+// 卡2/卡3 佔位，PR-B/PR-C 上線。全部走新設計 token（酒紅 primary／霧金 accent）。
 
-const TITLE_MAX = 60 // 與 worker/copy.js 一致
-const AUX_MAX = 3
+const MUST_MAX = 4
 
 const inputCls =
   'w-full rounded-[8px] border border-line bg-surface px-3 py-2.5 text-base text-ink placeholder:text-muted/60 focus:border-primary focus:outline-none'
@@ -12,12 +13,9 @@ const inputCls =
 const EMPTY = {
   currentTitle: '',
   competitorTitles: '',
-  candidates: [],
-  suggested: null,
-  mainKw: '',
-  auxKws: [],
+  mustInclude: [],
   titleResults: [],
-  titleChecks: [],
+  rationale: null,
 }
 
 // 收合式卡片外殼
@@ -42,86 +40,46 @@ function Card({ icon, title, subtitle, open, onToggle, disabled, children }) {
   )
 }
 
-// 品檢一列：pass 灰勾、fail 紅字＋怎麼修
-function CheckRow({ ok, label, fix }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-        ok ? 'bg-line/40 text-muted' : 'bg-rose-50 text-rose-600'
-      }`}
-    >
-      {ok ? '✓' : '✕'} {ok ? label : fix || label}
-    </span>
-  )
-}
-
 export default function OptimizePage({ product, work, setWork, password, setBudget, overBudget }) {
   const opt = work.optimize || EMPTY
   const [openCard, setOpenCard] = useState(1)
-  const [kwLoading, setKwLoading] = useState(false)
-  const [titleLoading, setTitleLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [copiedIdx, setCopiedIdx] = useState(-1)
+  const [mustDraft, setMustDraft] = useState('')
 
   function update(patch) {
     setWork((w) => ({ ...w, optimize: { ...(w.optimize || EMPTY), ...patch } }))
   }
 
   const hasName = !!product.name.trim()
-  const authHeaders = password ? { 'x-app-password': password } : {}
+  const mustInclude = opt.mustInclude || []
+  const main = (opt.rationale && opt.rationale.main) || ''
 
-  async function findKeywords() {
-    const titles = (opt.competitorTitles || '').split('\n').map((s) => s.trim()).filter(Boolean)
-    if (titles.length === 0 || kwLoading || overBudget) return
-    setError('')
-    setKwLoading(true)
-    try {
-      const res = await fetch('/api/keywords', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...authHeaders },
-        body: JSON.stringify({
-          productName: product.name,
-          currentTitle: (opt.currentTitle || product.name || '').trim(),
-          competitorTitles: titles,
-        }),
-      })
-      if (res.status === 503) throw new Error('後台尚未設定 AI 金鑰')
-      if (res.status === 429) {
-        const d = await res.json().catch(() => ({}))
-        if (d.budget) setBudget(d.budget)
-        throw new Error(d.error || '本月 AI 額度已用完')
-      }
-      const data = await res.json()
-      if (data.budget) setBudget(data.budget)
-      if (!res.ok) throw new Error(data.error || 'AI 忙線中，再按一次')
-      update({
-        candidates: data.candidates || [],
-        suggested: data.suggested || null,
-        mainKw: (data.suggested && data.suggested.main) || '',
-        auxKws: (data.suggested && data.suggested.aux) || [],
-        titleResults: [],
-        titleChecks: [],
-      })
-    } catch (err) {
-      setError(String(err && err.message ? err.message : err))
-    } finally {
-      setKwLoading(false)
-    }
+  function addMust() {
+    const v = mustDraft.trim()
+    if (v && !mustInclude.includes(v) && mustInclude.length < MUST_MAX) update({ mustInclude: [...mustInclude, v] })
+    setMustDraft('')
+  }
+  function removeMust(k) {
+    update({ mustInclude: mustInclude.filter((x) => x !== k) })
   }
 
   async function genTitles() {
-    if (!opt.mainKw || titleLoading || overBudget) return
+    const comps = (opt.competitorTitles || '').split('\n').map((s) => s.trim()).filter(Boolean)
+    if (comps.length === 0 || loading || overBudget) return
     setError('')
-    setTitleLoading(true)
+    setLoading(true)
     try {
       const res = await fetch('/api/copy', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', ...authHeaders },
+        headers: { 'content-type': 'application/json', ...(password ? { 'x-app-password': password } : {}) },
         body: JSON.stringify({
           mode: 'optimize-title',
-          product: { name: product.name, material: product.material },
+          productName: product.name,
           currentTitle: (opt.currentTitle || product.name || '').trim(),
-          keywords: { main: opt.mainKw, aux: opt.auxKws },
+          competitorTitles: comps,
+          mustInclude,
         }),
       })
       if (res.status === 503) throw new Error('後台尚未設定 AI 金鑰')
@@ -133,21 +91,18 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
       const data = await res.json()
       if (data.budget) setBudget(data.budget)
       if (!res.ok) throw new Error(data.error || 'AI 忙線中，再按一次')
-      update({ titleResults: data.titles || [], titleChecks: data.titleChecks || [] })
+      update({ titleResults: data.titles || [], rationale: data.rationale || null })
     } catch (err) {
       setError(String(err && err.message ? err.message : err))
     } finally {
-      setTitleLoading(false)
+      setLoading(false)
     }
   }
 
-  function setMain(kw) {
-    update({ mainKw: opt.mainKw === kw ? '' : kw, auxKws: opt.auxKws.filter((k) => k !== kw) })
-  }
-  function toggleAux(kw) {
-    if (kw === opt.mainKw) return
-    if (opt.auxKws.includes(kw)) update({ auxKws: opt.auxKws.filter((k) => k !== kw) })
-    else if (opt.auxKws.length < AUX_MAX) update({ auxKws: [...opt.auxKws, kw] })
+  function editTitle(i, val) {
+    const next = [...(opt.titleResults || [])]
+    next[i] = val
+    update({ titleResults: next })
   }
 
   async function copyTitle(title, i) {
@@ -165,6 +120,9 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
     setTimeout(() => setCopiedIdx(-1), 1800)
   }
 
+  const rationale = opt.rationale
+  const titles = opt.titleResults || []
+
   return (
     <div className="space-y-4">
       <div className="rounded-[12px] border border-line bg-surface px-5 py-3 text-sm font-semibold text-muted">
@@ -175,7 +133,7 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
       <Card
         icon="🔑"
         title="標題關鍵字優化"
-        subtitle="貼競品標題 → AI 抓關鍵字 → 勾主/輔 → 產優化標題"
+        subtitle="貼競品 →（選填）填必埋詞 → 一鍵直出可編輯標題"
         open={openCard === 1}
         onToggle={() => setOpenCard(openCard === 1 ? 0 : 1)}
       >
@@ -194,120 +152,107 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
           className={inputCls}
         />
 
-        <label className="mb-1 mt-4 block text-sm font-bold text-ink">
-          競品標題（一行一條，建議 5–10 條）
-        </label>
+        <label className="mb-1 mt-4 block text-sm font-bold text-ink">競品標題（一行一條，5–10 條）</label>
         <textarea
           rows={5}
           value={opt.competitorTitles}
           onChange={(e) => update({ competitorTitles: e.target.value })}
-          placeholder={'去蝦皮搜你的品，把「前排」賣得好的商品標題整條複製貼進來，一行一個。\nAI 只抄品類/屬性詞，不會抄別人品牌。'}
+          placeholder={
+            '搜你的目標關鍵字 → 點進前排同品類商品 → 複製「完整標題」貼入（一行一條，5–10 條）。\n別貼列表頁截斷的標題。'
+          }
           className={`${inputCls} resize-none`}
         />
 
-        <button
-          type="button"
-          onClick={findKeywords}
-          disabled={!(opt.competitorTitles || '').trim() || kwLoading || overBudget}
-          className="mt-3 w-full rounded-[8px] bg-primary py-3 text-lg font-bold text-white transition active:scale-[0.98] disabled:opacity-40"
-        >
-          {kwLoading ? '🤖 AI 找關鍵字中…' : '🔍 AI 找關鍵字'}
-        </button>
-        {overBudget && (
-          <p className="mt-2 text-center text-sm font-bold text-rose-600">本月 AI 額度已用完</p>
-        )}
-
-        {/* 候選清單 */}
-        {opt.candidates && opt.candidates.length > 0 && (
-          <div className="mt-4">
-            <p className="mb-2 text-sm font-bold text-ink">
-              勾主關鍵字（1 個）＋輔助（最多 {AUX_MAX} 個）
-              <span className="ml-1 font-normal text-muted">依競品出現次數排序</span>
-            </p>
-            <div className="space-y-1.5">
-              {opt.candidates.map((c) => {
-                const isMain = opt.mainKw === c.keyword
-                const isAux = opt.auxKws.includes(c.keyword)
-                return (
-                  <div
-                    key={c.keyword}
-                    className={`flex items-center justify-between gap-2 rounded-[8px] border px-3 py-2 ${
-                      isMain
-                        ? 'border-primary bg-primary/5'
-                        : isAux
-                          ? 'border-accent bg-accent/10'
-                          : 'border-line bg-surface'
-                    }`}
-                  >
-                    <span className="min-w-0">
-                      <span className="text-base font-bold text-ink">{c.keyword}</span>
-                      <span className="ml-2 font-mono text-xs text-muted">
-                        出現 {c.count} 次·第 {c.sources.map((n) => n + 1).join(',')} 條
-                      </span>
-                    </span>
-                    <span className="flex shrink-0 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setMain(c.keyword)}
-                        className={`rounded-full px-3 py-1 text-xs font-bold active:scale-95 ${
-                          isMain ? 'bg-primary text-white' : 'border border-line text-muted'
-                        }`}
-                      >
-                        主
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toggleAux(c.keyword)}
-                        disabled={isMain || (!isAux && opt.auxKws.length >= AUX_MAX)}
-                        className={`rounded-full px-3 py-1 text-xs font-bold active:scale-95 disabled:opacity-30 ${
-                          isAux ? 'bg-accent text-white' : 'border border-line text-muted'
-                        }`}
-                      >
-                        輔
-                      </button>
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={genTitles}
-              disabled={!opt.mainKw || titleLoading || overBudget}
-              className="mt-3 w-full rounded-[8px] bg-primary py-3 text-lg font-bold text-white transition active:scale-[0.98] disabled:opacity-40"
-            >
-              {titleLoading ? '🤖 產生優化標題中…' : '✍️ 產生優化標題'}
-            </button>
-            {!opt.mainKw && (
-              <p className="mt-1 text-center text-xs text-muted">先點一個「主」關鍵字</p>
-            )}
+        {/* 必埋詞 */}
+        <label className="mb-1 mt-4 block text-sm font-bold text-ink">
+          必埋詞（選填，最多 {MUST_MAX} 個）
+        </label>
+        <p className="mb-1.5 text-xs text-muted">這個品要強調且「屬實」的詞：贈品、SGS 檢測、隔日到貨…（沒有就留空）</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={mustDraft}
+            onChange={(e) => setMustDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addMust()
+              }
+            }}
+            placeholder="輸入後按新增"
+            disabled={mustInclude.length >= MUST_MAX}
+            className={inputCls}
+          />
+          <button
+            type="button"
+            onClick={addMust}
+            disabled={mustInclude.length >= MUST_MAX}
+            className="shrink-0 rounded-[8px] border border-line px-4 py-2.5 text-base font-bold text-ink active:scale-95 disabled:opacity-40"
+          >
+            新增
+          </button>
+        </div>
+        {mustInclude.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {mustInclude.map((k) => (
+              <span
+                key={k}
+                className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-sm font-semibold text-ink"
+              >
+                {k}
+                <button type="button" onClick={() => removeMust(k)} className="text-muted active:text-ink" aria-label={`移除 ${k}`}>
+                  ✕
+                </button>
+              </span>
+            ))}
           </div>
         )}
 
-        {/* 標題候選 */}
-        {opt.titleResults && opt.titleResults.length > 0 && (
+        <button
+          type="button"
+          onClick={genTitles}
+          disabled={!(opt.competitorTitles || '').trim() || loading || overBudget}
+          className="mt-4 w-full rounded-[8px] bg-primary py-3 text-lg font-bold text-white transition active:scale-[0.98] disabled:opacity-40"
+        >
+          {loading ? '🤖 產生優化標題中…' : '✍️ 產生優化標題'}
+        </button>
+        {overBudget && <p className="mt-2 text-center text-sm font-bold text-rose-600">本月 AI 額度已用完</p>}
+
+        {/* 標題候選（可直接編輯，即時品檢） */}
+        {titles.length > 0 && (
           <div className="mt-4 space-y-3">
-            <p className="text-sm font-bold text-ink">優化標題候選（挑一個複製貼後台）</p>
-            {opt.titleResults.map((t, i) => {
-              const c = opt.titleChecks[i] || {}
+            <p className="text-sm font-bold text-ink">
+              優化標題候選（可直接改，改完再複製）
+            </p>
+            {titles.map((t, i) => {
+              const c = checkTitle(t, { main, mustInclude })
+              const msgs = checkMessages(c)
+              const ok = msgs.length === 0
               return (
                 <div key={i} className="rounded-[8px] border border-line p-3">
-                  <p className="text-base text-ink">{t}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <CheckRow ok={!c.over} label={`${c.len ?? 0}/${TITLE_MAX} 字`} fix={`${c.len} 字，超過 ${TITLE_MAX}`} />
-                    <CheckRow ok={c.mainFirst !== false} label="主字前置" fix="主關鍵字不在前面" />
-                    <CheckRow
-                      ok={!c.auxMissing || c.auxMissing.length === 0}
-                      label="輔助字齊全"
-                      fix={`缺：${(c.auxMissing || []).join('、')}`}
-                    />
-                    <CheckRow
-                      ok={!c.forbiddenHits || c.forbiddenHits.length === 0}
-                      label="無禁字"
-                      fix={`禁字：${(c.forbiddenHits || []).join('、')}`}
-                    />
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className={`font-mono text-xs ${c.over || c.tooShort ? 'font-bold text-rose-600' : 'text-muted'}`}>
+                      {c.len}/{TITLE_MAX} 字
+                    </span>
+                    <span className={`text-xs font-bold ${ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {ok ? '✓ 全過' : '✕ 有問題'}
+                    </span>
                   </div>
+                  <textarea
+                    rows={2}
+                    value={t}
+                    onChange={(e) => editTitle(i, e.target.value)}
+                    className="w-full resize-none rounded-[8px] border border-line bg-surface p-2.5 text-base text-ink focus:border-primary focus:outline-none"
+                  />
+                  {msgs.length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {msgs.map((m, j) => (
+                        <li key={j} className="text-xs font-semibold text-rose-600">
+                          ✕ {m}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   <button
                     type="button"
                     onClick={() => copyTitle(t, i)}
@@ -320,6 +265,48 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
                 </div>
               )
             })}
+
+            {/* 選字依據（抽查用，預設收合） */}
+            {rationale && (
+              <details className="rounded-[8px] border border-line bg-bg/40 px-3 py-2">
+                <summary className="cursor-pointer text-sm font-bold text-muted">🔎 選字依據（老闆抽查用）</summary>
+                <div className="mt-2 space-y-2 text-sm">
+                  {rationale.main && (
+                    <p className="text-ink">
+                      主關鍵字：<span className="font-bold">{rationale.main}</span>
+                    </p>
+                  )}
+                  {Array.isArray(rationale.picked) && rationale.picked.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold text-muted">選入：</p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {rationale.picked.map((p, i) => (
+                          <span key={i} className="rounded-full bg-line/50 px-2 py-0.5 text-xs text-ink">
+                            {p.keyword}
+                            <span className="text-muted">
+                              {' '}
+                              ·{p.type || '—'}·{p.count}次
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {Array.isArray(rationale.excluded) && rationale.excluded.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold text-muted">排除：</p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {rationale.excluded.map((p, i) => (
+                          <span key={i} className="rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-600">
+                            {p.keyword} <span className="opacity-70">（{p.reason}）</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
           </div>
         )}
 
@@ -330,7 +317,7 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
       <Card
         icon="✍️"
         title="內文前 100 字鋪字"
-        subtitle="依卡1勾好的關鍵字鋪內文開頭"
+        subtitle="依關鍵字鋪內文開頭"
         open={false}
         onToggle={() => {}}
         disabled
