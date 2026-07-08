@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { checkTitle, checkMessages, TITLE_MAX } from '../titleCheck.js'
+import { checkTitle, checkMessages, checkIntro, introMessages, TITLE_MAX } from '../titleCheck.js'
 
 // 優化舊品：給在售品局部補強。PR-A-fix：卡1 改成「單次 AI 直出 2–3 個完整標題」，
 // 選字規則全在後端，員工只做：貼競品 →（選填）填必埋詞 → 挑一個標題（可直接編輯）。
@@ -16,6 +16,9 @@ const EMPTY = {
   mustInclude: [],
   titleResults: [],
   rationale: null,
+  introResults: [],
+  introAux: [],
+  introShownIdx: 0,
 }
 
 // 收合式卡片外殼
@@ -46,6 +49,7 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [copiedIdx, setCopiedIdx] = useState(-1)
+  const [copiedIntroIdx, setCopiedIntroIdx] = useState(-1)
   const [mustDraft, setMustDraft] = useState('')
 
   function update(patch) {
@@ -91,7 +95,14 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
       const data = await res.json()
       if (data.budget) setBudget(data.budget)
       if (!res.ok) throw new Error(data.error || 'AI 忙線中，再按一次')
-      update({ titleResults: data.titles || [], rationale: data.rationale || null, shownIdx: 0 })
+      update({
+        titleResults: data.titles || [],
+        rationale: data.rationale || null,
+        shownIdx: 0,
+        introResults: data.intros || [],
+        introAux: data.introAux || [],
+        introShownIdx: 0,
+      })
     } catch (err) {
       setError(String(err && err.message ? err.message : err))
     } finally {
@@ -103,6 +114,29 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
     const next = [...(opt.titleResults || [])]
     next[i] = val
     update({ titleResults: next })
+  }
+
+  function editIntro(i, val) {
+    const next = [...(opt.introResults || [])]
+    next[i] = val
+    update({ introResults: next })
+  }
+
+  async function copyText(text, kind, i) {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      const el = document.createElement('textarea')
+      el.value = text
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+    }
+    if (kind === 'intro') {
+      setCopiedIntroIdx(i)
+      setTimeout(() => setCopiedIntroIdx(-1), 1800)
+    }
   }
 
   async function copyTitle(title, i) {
@@ -335,15 +369,83 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
         {error && <p className="mt-2 text-center text-sm font-bold text-rose-600">{error}</p>}
       </Card>
 
-      {/* 卡2：內文前 100 字（PR-B） */}
+      {/* 卡2：內文前 100 字（跟卡1 同一次呼叫免費附贈） */}
       <Card
         icon="✍️"
         title="內文前 100 字鋪字"
-        subtitle="依關鍵字鋪內文開頭"
-        open={false}
-        onToggle={() => {}}
-        disabled
-      />
+        subtitle="跟標題一起產、不另外花錢"
+        open={openCard === 2}
+        onToggle={() => setOpenCard(openCard === 2 ? 0 : 2)}
+      >
+        {(opt.introResults || []).length === 0 ? (
+          <p className="rounded-[8px] bg-bg/60 px-3 py-3 text-sm text-muted">
+            先到上面卡1 按「🤖 AI 幫你寫標題」——內文前 100 字會「一起產出」（同一次呼叫、不另外花錢），完成後這裡自動出現。
+          </p>
+        ) : (
+          (() => {
+            const arr = opt.introResults
+            const iidx = Math.min(opt.introShownIdx || 0, arr.length - 1)
+            const t = arr[iidx]
+            const c = checkIntro(t, { main, aux: opt.introAux || [] })
+            const msgs = introMessages(c)
+            const ok = msgs.length === 0
+            const multi = arr.length > 1
+            return (
+              <div className="space-y-2">
+                <p className="text-xs text-muted">
+                  貼到蝦皮內文「最前面」。100 字之後你自己接原本的內文；主關鍵字在前 30 字、關鍵字不硬塞。
+                </p>
+                <div className="rounded-[8px] border border-line p-3">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className={`font-mono text-xs ${c.tooShort ? 'font-bold text-rose-600' : 'text-muted'}`}>
+                      {c.len} 字{multi ? `　（第 ${iidx + 1}/${arr.length} 段）` : ''}
+                    </span>
+                    <span className={`text-xs font-bold ${ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {ok ? '✓ 全過' : '✕ 有問題'}
+                    </span>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={t}
+                    onChange={(e) => editIntro(iidx, e.target.value)}
+                    className="w-full resize-none rounded-[8px] border border-line bg-surface p-2.5 text-base text-ink focus:border-primary focus:outline-none"
+                  />
+                  {msgs.length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {msgs.map((m, j) => (
+                        <li key={j} className="text-xs font-semibold text-rose-600">
+                          ✕ {m}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => copyText(t, 'intro', iidx)}
+                      className={`flex-1 rounded-[8px] py-2.5 text-base font-bold text-white transition active:scale-[0.98] ${
+                        copiedIntroIdx === iidx ? 'bg-emerald-500' : 'bg-ink'
+                      }`}
+                    >
+                      {copiedIntroIdx === iidx ? '✅ 已複製' : '📋 複製這段'}
+                    </button>
+                    {multi && (
+                      <button
+                        type="button"
+                        onClick={() => update({ introShownIdx: (iidx + 1) % arr.length })}
+                        className="shrink-0 rounded-[8px] border border-line px-4 py-2.5 text-base font-bold text-ink active:scale-95"
+                      >
+                        🔄 換一段
+                      </button>
+                    )}
+                  </div>
+                  {multi && <p className="mt-1 text-xs text-muted">免費換，儘管按（跟標題一起產的，不另外花錢）</p>}
+                </div>
+              </div>
+            )
+          })()
+        )}
+      </Card>
 
       {/* 卡3：Hero 重製（PR-C） */}
       <Card

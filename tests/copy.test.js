@@ -10,10 +10,12 @@ import {
   enforceTitle,
   finalizeTitles,
   synthesizeTitles,
+  buildIntroChecks,
   CANDIDATE_COUNT,
   TITLE_MAX,
   TITLE_MIN,
   MAIN_KW_FRONT,
+  INTRO_MAIN_FRONT,
 } from '../worker/copy.js'
 
 const POOL = ['大容量', '保冷保溫', '露營隨行杯', '辦公室車用水壺', '交換禮物首選', '通勤野餐水瓶', '上班族', '送禮', '矽膠杯', '派對冰塊盒']
@@ -77,6 +79,30 @@ test('buildChecks：60 字上限、禁字、公板格式、主關鍵字前置', 
 
   // 沒指定主關鍵字 → 不判定
   assert.equal(buildChecks(makeValidCopy(), '').keywordFirst, null)
+})
+
+test('buildIntroChecks（內文前100字品檢）：主字前30、禁堆疊、太短、禁字/黑名單', () => {
+  assert.equal(INTRO_MAIN_FRONT, 30)
+  // 主關鍵字在開頭、鋪關鍵字但不堆疊、夠長
+  const good =
+    '這款製冰盒真的是廚房小幫手，脫模超輕鬆一壓就掉，冰塊完整不碎裂，省空間好收納，做冰塊、副食品、寶寶粥都好用，食品級矽膠摸起來很安心，家裡用、露營帶著走都方便，實用又療癒的好物真心推薦給你入手一組'
+  const c = buildIntroChecks(good, { main: '製冰盒', aux: ['脫模', '省空間'] })
+  assert.equal(c.mainFront, true) // 製冰盒在前 30 字
+  assert.equal(c.tooShort, false)
+  assert.deepEqual(c.stacking, [])
+  assert.deepEqual(c.forbiddenHits, [])
+  assert.deepEqual(c.blacklistHits, [])
+
+  // 主關鍵字不在前 30 字 → mainFront false
+  const late = buildIntroChecks('先講一堆別的東西鋪陳很長很長很長很長很長很長很長很長很長很長之後才出現製冰盒', {
+    main: '製冰盒',
+    aux: [],
+  })
+  assert.equal(late.mainFront, false)
+
+  // 堆疊：同一詞前 100 字出現 3 次
+  const stack = buildIntroChecks('製冰盒製冰盒製冰盒 好用推薦給你買回家吧', { main: '製冰盒', aux: [] })
+  assert.ok(stack.stacking.includes('製冰盒'))
 })
 
 test('FORBIDDEN_WORDS：黑名單存在且都是字串', () => {

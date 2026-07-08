@@ -22,6 +22,11 @@ const MUST_INCLUDE_MAX = 4
 const REPAIR_LIMIT = 2 // 品檢不過的重修上限
 export const CANDIDATE_COUNT = 3 // 產給員工的候選數（不加到 5：品質靠「全合格」不靠數量）
 
+// 內文前 100 字（跟標題同一次呼叫免費附贈）：主關鍵字須在前 INTRO_MAIN_FRONT 字；同詞前 100 字內 ≤2 次。
+export const INTRO_MAIN_FRONT = 30
+export const INTRO_MIN = 80
+const INTRO_COUNT = 2
+
 // 禁字黑名單（措辭優化階段再跟 Mason 一起調）
 export const FORBIDDEN_WORDS = [
   '最便宜',
@@ -85,8 +90,18 @@ const OPTIMIZE_TITLE_SYSTEM_PROMPT = `你是蝦皮標題優化引擎。使用者
 - 不編造規格／材質／認證。
 - 禁字（一個都不准）：${FORBIDDEN_WORDS.join('、')}。
 
-每個標題務必落在 ${TITLE_MIN}–${TITLE_MAX} 字，寧可多塞高頻詞也不要短於 ${TITLE_MIN}。只輸出合法 JSON（不要 markdown 圍欄、不要解說）：
-{ "titles": ["候選1", "候選2", "候選3"], "rationale": { "main": "主品類詞", "picked": [{ "keyword": "詞", "type": "品類|屬性|場景|服務", "count": 次數 }], "excluded": [{ "keyword": "詞", "reason": "他牌品牌詞|被涵蓋|與本品無關" }] } }`
+每個標題務必落在 ${TITLE_MIN}–${TITLE_MAX} 字，寧可多塞高頻詞也不要短於 ${TITLE_MIN}。
+
+【內文前 100 字（intros，${INTRO_COUNT} 段，順便一起產）】
+這是蝦皮商品內文的「開頭前約 100 字」，蝦皮搜尋也吃內文前段。規則：
+- 主關鍵字要出現在「前 ${INTRO_MAIN_FRONT} 字內」。
+- 自然鋪進 2–3 個高頻關鍵字（前 100 字內各至少 1 次），但要「通順、像賣家在跟客人介紹」，不是關鍵字清單。
+- 同一個詞在前 100 字內最多出現 2 次（禁堆疊）。
+- 全繁體中文、口語親切；禁字同上；不出現任何品牌名；不編造規格。
+- 產 ${INTRO_COUNT} 段不同寫法，每段約 90–120 字。
+
+只輸出合法 JSON（不要 markdown 圍欄、不要解說）：
+{ "titles": ["候選1", "候選2", "候選3"], "intros": ["內文段1", "內文段2"], "rationale": { "main": "主品類詞", "picked": [{ "keyword": "詞", "type": "品類|屬性|場景|服務", "count": 次數 }], "excluded": [{ "keyword": "詞", "reason": "他牌品牌詞|被涵蓋|與本品無關" }] } }`
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS })
@@ -309,8 +324,29 @@ function buildTitleUserText(body, competitors, mustInclude) {
 function parseTitleResult(raw) {
   const p = parseAnalysisText(raw)
   const titles = p && Array.isArray(p.titles) ? p.titles.filter(isStr).slice(0, CANDIDATE_COUNT) : []
+  const intros = p && Array.isArray(p.intros) ? p.intros.filter(isStr).slice(0, INTRO_COUNT) : []
   const rationale = p && p.rationale && typeof p.rationale === 'object' ? p.rationale : null
-  return { titles, rationale }
+  return { titles, intros, rationale }
+}
+
+// 內文前 100 字的程式品檢（前後端同一套；前端 src/titleCheck.js 為同值鏡像）。
+// keywords = { main, aux:[] }（aux 取選字依據前幾個高頻詞）
+export function buildIntroChecks(intro, keywords = {}) {
+  const t = String(intro || '')
+  const arr = [...t]
+  const first30 = arr.slice(0, INTRO_MAIN_FRONT).join('')
+  const first100 = arr.slice(0, 100).join('')
+  const main = String(keywords.main || '').trim()
+  const aux = (Array.isArray(keywords.aux) ? keywords.aux : []).map((s) => String(s || '').trim()).filter(Boolean)
+  const uniq = [...new Set([main, ...aux].filter(Boolean))]
+  return {
+    len: arr.length,
+    tooShort: arr.length < INTRO_MIN,
+    mainFront: main ? first30.includes(main) : null,
+    stacking: uniq.filter((k) => first100.split(k).length - 1 > 2), // 前 100 字內出現 >2 次
+    forbiddenHits: FORBIDDEN_WORDS.filter((w) => t.includes(w)),
+    blacklistHits: blacklistHits(t),
+  }
 }
 
 // 字池：優先用 sanitizeRationale 的 picked（已過濾/去重/依次數排序）；不足再用競品切詞補。
@@ -461,12 +497,14 @@ async function handleOptimizeTitle(env, body) {
   }
 
   let titles = []
+  let intros = []
   let rationale = null
   const messages = [{ role: 'user', content: userText }]
   try {
     const first = await call(messages)
     const parsed = parseTitleResult(first)
     titles = parsed.titles
+    intros = parsed.intros
     rationale = parsed.rationale
     messages.push({ role: 'assistant', content: first })
   } catch (err) {
@@ -497,6 +535,7 @@ async function handleOptimizeTitle(env, body) {
       const retryRaw = await call(messages)
       const parsed = parseTitleResult(retryRaw)
       if (parsed.titles.length) titles = parsed.titles
+      if (parsed.intros.length) intros = parsed.intros
       if (parsed.rationale) rationale = parsed.rationale
       messages.push({ role: 'assistant', content: retryRaw })
       ;({ san, list } = finalize())
@@ -508,9 +547,14 @@ async function handleOptimizeTitle(env, body) {
   await addUsage(env, spentInput, spentOutput)
   // 寧缺勿濫：list 全部保證全過；一個都湊不出才回錯。
   if (list.length === 0) return json({ error: 'AI 忙線中，再按一次', budget: await buildBudget(env) }, 502)
+  // 內文前 100 字：跟標題同一次呼叫免費附贈；aux 取選字依據前幾個高頻詞（非主）供品檢覆蓋率參考。
+  const introAux = san.picked.map((p) => p.keyword).filter((k) => k !== san.main).slice(0, 3)
   return json({
     titles: list,
     titleChecks: list.map((t) => buildTitleChecks(t, { main: san.main, mustInclude })),
+    intros,
+    introChecks: intros.map((t) => buildIntroChecks(t, { main: san.main, aux: introAux })),
+    introAux,
     rationale: san,
     budget: await buildBudget(env),
   })
