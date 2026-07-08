@@ -34,7 +34,7 @@ export default {
 async function handleApi(request, env, url) {
   if (!authed(request, env)) return json({ error: 'unauthorized' }, 401)
 
-  // /api/analyze：白牌九圖的 AI 素材分析（不需要 KV）
+  // /api/analyze：新品九圖的 AI 素材分析（不需要 KV）
   if (url.pathname === '/api/analyze' && request.method === 'POST') {
     return handleAnalyze(request, env)
   }

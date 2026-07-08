@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-// 白牌九圖的單張工作卡：序號＋圖種名／素材提示（＋存素材圖）／prompt（預設折疊）／複製／文字核對清單／完成勾勾。
+// 新品九圖的單張工作卡：序號＋圖種名／素材提示（＋存素材圖）／prompt（預設折疊）／複製／文字核對清單／完成勾勾。
 // materialImage：{ index, download }，AI 建議的那張素材圖；copiedBefore＋onCopied：持久的「已複製」標記。
 export default function NineCard({ card, done, onToggleDone, isHero, materialImage, copiedBefore, onCopied }) {
   const [expanded, setExpanded] = useState(false)

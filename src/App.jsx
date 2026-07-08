@@ -18,19 +18,39 @@ const TABS = [
 ]
 
 const MODES = [
-  { key: 'nine', label: '⚡ 白牌九圖' },
+  { key: 'nine', label: '⚡ 新品九圖' },
+  { key: 'optimize', label: '🔧 優化舊品' },
   { key: 'classic', label: '🗂 經典模式' },
 ]
 
 const PW_KEY = 'enxi_pw'
 
+// 頂欄常駐的迷你額度指示（read-only，自己抓 /api/usage；不影響各模式內部流程）。
+function TopBudget({ budget }) {
+  if (!budget || !budget.tracked) return null
+  const full = budget.usedTWD >= budget.limitTWD
+  const dot = full ? 'bg-rose-500' : budget.percent >= 80 ? 'bg-amber-400' : 'bg-accent'
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-xs font-semibold text-muted"
+      title={`本月 AI 額度：NT$${budget.usedTWD} / NT$${budget.limitTWD}`}
+    >
+      <span className={`h-2 w-2 rounded-full ${dot}`} />
+      <span className="font-mono">
+        NT${budget.usedTWD}/{budget.limitTWD}
+      </span>
+    </span>
+  )
+}
+
 export default function App() {
-  // 白牌九圖為預設；經典模式＝原有四分頁工作流（樂扣、珍珠照舊）。
+  // 新品九圖為預設；優化舊品＝在售品局部補強；經典模式＝原有四分頁工作流（樂扣、珍珠照舊）。
   const [mode, setMode] = useState('nine')
   const [product, setProduct] = useState(makeNineDefaultProduct)
   const [work, setWork] = useState(makeEmptyWork)
   const [currentId, setCurrentId] = useState(null)
   const [tab, setTab] = useState('title')
+  const [budget, setBudget] = useState(null)
 
   // 密碼鎖：'checking' | 'open' | 'locked'。後端未設密碼時一律 open。
   // 密碼記在 localStorage：換分頁、關掉重開都不用重輸（內部工具，方便優先）。
@@ -49,6 +69,15 @@ export default function App() {
       .catch(() => setAuthState('open')) // 連不到後端 → 本機模式，不擋
   }, [password])
 
+  // 頂欄額度：跟 NinePage 各自抓一次（read-only，不共用 state 才不動內部流程）。
+  useEffect(() => {
+    if (authState !== 'open') return
+    fetch('/api/usage', { headers: password ? { 'x-app-password': password } : {} })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && d.budget && setBudget(d.budget))
+      .catch(() => {})
+  }, [authState, password])
+
   function unlock(pw) {
     localStorage.setItem(PW_KEY, pw)
     setPassword(pw)
@@ -56,7 +85,7 @@ export default function App() {
   }
 
   // 切模式時，如果商品還是另一個模式的「全新空白」狀態，就換成目標模式的空白預設；
-  // 已載入或改過的商品原封不動帶過去。
+  // 已載入或改過的商品原封不動帶過去。（optimize 不換商品，沿用目前的。）
   function switchMode(next) {
     if (next === mode) return
     const pristine = JSON.stringify(product)
@@ -70,9 +99,7 @@ export default function App() {
 
   if (authState === 'checking') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-400">
-        載入中⋯
-      </div>
+      <div className="flex min-h-screen items-center justify-center bg-bg text-muted">載入中⋯</div>
     )
   }
 
@@ -80,98 +107,112 @@ export default function App() {
     return <LockScreen onUnlock={unlock} />
   }
 
+  // 側欄用哪個空白預設，取決於目前模式（optimize 沿用新品的空白）。
+  const blankForMode = mode === 'classic' ? makeDefaultProduct : makeNineDefaultProduct
+
   return (
-    <div className="mx-auto min-h-screen w-full max-w-[480px] bg-slate-100 px-4 pb-10 pt-4">
-      <header className="mb-4 text-center">
-        <h1 className="text-2xl font-extrabold text-teal-700">恩希上架工具</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          {mode === 'nine'
-            ? '上傳素材 → 一顆按鈕 → 九張圖指令逐張貼給 GPT'
-            : '填空 → 產生 → 複製，貼到蝦皮 / Momo / GPT'}
-        </p>
+    <div className="min-h-screen">
+      {/* 頂欄：工具名｜三顆模式｜額度（桌機常駐，手機模式列換行） */}
+      <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur">
+        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+          <h1 className="text-lg font-bold text-primary">恩希上架工具</h1>
+          <div className="order-3 w-full md:order-none md:w-auto">
+            <nav className="grid grid-cols-3 gap-1.5 md:flex">
+              {MODES.map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => switchMode(m.key)}
+                  className={`rounded-[8px] px-3 py-2 text-sm font-bold transition active:scale-[0.98] ${
+                    mode === m.key
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'border border-line bg-surface text-ink/70 hover:bg-line/40'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+          <div className="ml-auto">
+            <TopBudget budget={budget} />
+          </div>
+        </div>
       </header>
 
-      {/* 模式切換 */}
-      <div className="mb-4 grid grid-cols-2 gap-2">
-        {MODES.map((m) => (
-          <button
-            key={m.key}
-            type="button"
-            onClick={() => switchMode(m.key)}
-            className={`rounded-2xl py-4 text-lg font-extrabold transition active:scale-[0.97] ${
-              mode === m.key
-                ? 'bg-teal-600 text-white shadow'
-                : 'bg-white text-slate-500 border-2 border-slate-200'
-            }`}
-          >
-            {m.label}
-          </button>
-        ))}
+      {/* 主體：左側商品欄（桌機常駐）＋主工作區（≤960）。手機收成單欄、側欄移到下方。 */}
+      <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-4 py-4 md:flex-row md:items-start md:gap-6">
+        <aside className="order-2 md:order-1 md:sticky md:top-[68px] md:w-[260px] md:shrink-0">
+          <SavedProducts
+            product={product}
+            setProduct={setProduct}
+            work={work}
+            setWork={setWork}
+            currentId={currentId}
+            setCurrentId={setCurrentId}
+            password={password}
+            makeBlankProduct={blankForMode}
+          />
+        </aside>
+
+        <main className="order-1 min-w-0 md:order-2 md:flex-1">
+          <div className="mx-auto max-w-[960px]">
+            {mode === 'nine' && (
+              <NinePage
+                product={product}
+                setProduct={setProduct}
+                work={work}
+                setWork={setWork}
+                password={password}
+              />
+            )}
+
+            {mode === 'optimize' && (
+              <section className="rounded-[12px] border border-line bg-surface p-8 text-center shadow-sm">
+                <h2 className="text-xl font-bold text-ink">🔧 優化舊品</h2>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
+                  給在售品局部補強的三張卡：① 標題關鍵字優化 ② 內文前 100 字鋪字 ③ Hero 單張重製。
+                  <br />
+                  下一版上線，敬請期待。
+                </p>
+              </section>
+            )}
+
+            {mode === 'classic' && (
+              <>
+                <ProductForm product={product} setProduct={setProduct} />
+
+                {/* 分頁切換（黏在頂欄下方） */}
+                <nav className="sticky top-[60px] z-10 mt-5 grid grid-cols-4 gap-2 rounded-[12px] border border-line bg-bg/95 p-2 backdrop-blur">
+                  {TABS.map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setTab(t.key)}
+                      className={`rounded-[8px] py-3 text-lg font-bold transition active:scale-[0.97] ${
+                        tab === t.key
+                          ? 'bg-primary text-white shadow'
+                          : 'border border-line bg-surface text-ink/70'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </nav>
+
+                <div className="mt-3 rounded-[12px] border border-line bg-surface p-4 shadow-sm">
+                  {tab === 'title' && <TitleTab product={product} work={work} setWork={setWork} />}
+                  {tab === 'body' && <BodyTab product={product} work={work} setWork={setWork} />}
+                  {tab === 'image' && <ImageTab product={product} work={work} setWork={setWork} />}
+                  {tab === 'price' && <PriceTab product={product} work={work} setWork={setWork} />}
+                </div>
+              </>
+            )}
+
+            <Footer />
+          </div>
+        </main>
       </div>
-
-      {mode === 'nine' ? (
-        <>
-          <NinePage
-            product={product}
-            setProduct={setProduct}
-            work={work}
-            setWork={setWork}
-            password={password}
-          />
-          <SavedProducts
-            product={product}
-            setProduct={setProduct}
-            work={work}
-            setWork={setWork}
-            currentId={currentId}
-            setCurrentId={setCurrentId}
-            password={password}
-            makeBlankProduct={makeNineDefaultProduct}
-          />
-        </>
-      ) : (
-        <>
-          <ProductForm product={product} setProduct={setProduct} />
-
-          <SavedProducts
-            product={product}
-            setProduct={setProduct}
-            work={work}
-            setWork={setWork}
-            currentId={currentId}
-            setCurrentId={setCurrentId}
-            password={password}
-            makeBlankProduct={makeDefaultProduct}
-          />
-
-          {/* 分頁切換 */}
-          <nav className="sticky top-0 z-10 mt-5 grid grid-cols-4 gap-2 rounded-2xl bg-slate-100 py-2">
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setTab(t.key)}
-                className={`rounded-xl py-3 text-lg font-bold transition active:scale-[0.97] ${
-                  tab === t.key
-                    ? 'bg-teal-600 text-white shadow'
-                    : 'bg-white text-slate-600 border-2 border-slate-200'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </nav>
-
-          <main className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
-            {tab === 'title' && <TitleTab product={product} work={work} setWork={setWork} />}
-            {tab === 'body' && <BodyTab product={product} work={work} setWork={setWork} />}
-            {tab === 'image' && <ImageTab product={product} work={work} setWork={setWork} />}
-            {tab === 'price' && <PriceTab product={product} work={work} setWork={setWork} />}
-          </main>
-        </>
-      )}
-
-      <Footer />
     </div>
   )
 }

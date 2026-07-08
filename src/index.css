@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+/* ===== 設計 token（單一出處，取自 BOACUP 品牌色系；避開 AI 生成味預設配色）=====
+   PR-D1：先建立 token 與桌機 AppShell 外殼；卡片內部酒紅化在後續 PR。 */
+@theme {
+  --color-bg: #faf7f2; /* 奶白：頁面底 */
+  --color-surface: #ffffff; /* 卡片底 */
+  --color-ink: #2b2622; /* 深墨棕：主文字 */
+  --color-muted: #6b625a; /* 輔助文字 */
+  --color-primary: #7a2e3a; /* 深酒紅：主按鈕、進行中、選中 */
+  --color-accent: #b99a5f; /* 霧金：完成、次要強調、進度 */
+  --color-line: #e7dfd4; /* 分隔線、卡框 */
+
+  /* 中文系統字型堆疊，不載 webfont（乞丐打法）。數字用等寬避免跳動。 */
+  --font-sans: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+}
+
 html,
 body {
   margin: 0;
@@ -8,7 +25,16 @@ body {
 }
 
 body {
-  background-color: #f1f5f9;
-  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC",
-    "Microsoft JhengHei", sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* 尊重使用者的減少動態設定（品質底線）。 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
