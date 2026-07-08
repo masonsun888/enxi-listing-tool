@@ -9,6 +9,7 @@ import {
   sanitizeRationale,
   enforceTitle,
   finalizeTitles,
+  synthesizeTitles,
   CANDIDATE_COUNT,
   TITLE_MAX,
   TITLE_MIN,
@@ -157,6 +158,24 @@ test('finalizeTitles：只回全過的、上限 3、湊不滿就減量（絕不�
   assert.ok(!list.some((t) => t.includes('長長長')))
   // 只有 2 句可救 → 減量成 2（不硬湊第 3 個不合格）
   assert.equal(list.length, 2)
+})
+
+test('synthesizeTitles：不夠就用字池合成補滿到 3、全過且不重複', () => {
+  const opts = { main: '保溫杯', mustInclude: ['贈品'], pool: POOL, count: CANDIDATE_COUNT }
+  // AI 只給 1 句（補字後合格）→ 合成補到 3
+  const one = finalizeTitles(['保溫杯 316不鏽鋼'], opts)
+  assert.ok(one.length >= 1)
+  const list = synthesizeTitles(one, opts)
+  assert.equal(list.length, CANDIDATE_COUNT, '應補滿到 3')
+  assert.equal(new Set(list).size, list.length, '不可重複')
+  for (const t of list) {
+    const c = buildTitleChecks(t, { main: '保溫杯', mustInclude: ['贈品'] })
+    assert.equal(c.over, false)
+    assert.equal(c.tooShort, false)
+    assert.equal(c.mainFirst, true)
+    assert.deepEqual(c.mustMissing, [])
+    assert.deepEqual(c.forbiddenHits, [])
+  }
 })
 
 test('必埋詞未逐字出現 → 品檢判不過（mustMissing 非空）', () => {
