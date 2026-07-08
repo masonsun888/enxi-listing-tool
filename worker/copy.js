@@ -2,14 +2,21 @@
 // 員工拿到的是「可直接貼上蝦皮的成品」，不再需要複製 prompt 去 GPT。
 // 純文字呼叫（不傳圖），一次約 NT$0.3~0.5，與 /api/analyze 共用額度記帳與月上限。
 import { callClaudeApi, addUsage, buildBudget, parseAnalysisText } from './analyze.js'
-import { normalizeTitles, blacklistHits, coverageDedup, countIndependent, isFromTitles } from './keywords.js'
+import {
+  normalizeTitles,
+  blacklistHits,
+  coverageDedup,
+  countIndependent,
+  isFromTitles,
+  classifyExclusion,
+} from './keywords.js'
 
 const COPY_MAX_TOKENS = 2000
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' }
 
-// 蝦皮標題字數（D2 拍板；日後蝦皮放寬只改這裡）。優化標題塞 50–60 字、主關鍵字須落在前 MAIN_KW_FRONT 字內。
+// 蝦皮標題字數（D2 拍板；日後蝦皮放寬只改這裡）。優化標題塞 55–60 字、主關鍵字須落在前 MAIN_KW_FRONT 字內。
 export const TITLE_MAX = 60
-export const TITLE_MIN = 50
+export const TITLE_MIN = 55
 export const MAIN_KW_FRONT = 10
 const MUST_INCLUDE_MAX = 4
 const REPAIR_LIMIT = 2 // 品檢不過的重修上限
@@ -61,10 +68,15 @@ const OPTIMIZE_TITLE_SYSTEM_PROMPT = `你是蝦皮標題優化引擎。使用者
 【選字規則】
 1. 主關鍵字＝競品標題中「獨立出現次數最高的品類詞」，放每個標題最前面（前 ${MAIN_KW_FRONT} 字內）。
 2. 長複合詞優先＋涵蓋去重：若「陶瓷保溫瓶」入選，就不要再單獨放它的子字串「保溫瓶」佔字數。
-3. 屬性詞／場景詞補搜尋面，優先於品類變體填入後段。
-4. 服務詞（現貨／免運／隔日到貨／SGS／贈品…）只能用使用者「必埋詞」給的；你不得自行添加任何承諾類服務詞。必埋詞每一個都必須出現在每一個候選標題中。
+3. 屬性詞／場景詞／賣點詞都要盡量吃進來補搜尋面（例：製冰盒的「脫模神器」「省空間」是核心賣點詞，一定要留）。
+4. 服務詞（現貨／免運／隔日到貨／SGS／贈品…）只能用使用者「必埋詞」給的；你不得自行添加任何承諾類服務詞。必埋詞每一個都必須「一字不差」出現在每一個候選標題中。
+
+【排除規則（只排這三類，其餘存疑一律保留進字池）】
+- (a) 他牌品牌詞　(b) 明顯跨品類的蹭流量詞（跟本商品無關）　(c) 純編號／雜訊（如 0415）。
+- 屬性詞、場景詞、賣點詞「不准」當成無關而排除。
 
 【組裝】每個標題塞到 ${TITLE_MIN}–${TITLE_MAX} 字（中文 1 字＝1 元）；後段是關鍵字倉庫、用「空格」分隔堆疊；不強制任何框號【】符號；同一個詞最多出現 2 次；通順可讀、別堆到不能唸。
+【字數不足時】回頭把競品的「次高頻品類／屬性變體」補進後段倉庫，直到 ≥ ${TITLE_MIN} 字，不要硬湊無關詞。
 
 【紅線】
 - 只萃取競品原文出現過的詞（必埋詞除外）。
@@ -300,39 +312,49 @@ function parseTitleResult(raw) {
   return { titles, rationale }
 }
 
-// 後端重算 rationale：不信 AI 自報的計次。picked 過 substring 鐵律＋涵蓋去重＋獨立計次；
-// excluded 併入命中黑名單的詞。
-function sanitizeRationale(rationale, competitors) {
+// 後端重算 rationale（不信 AI 自報）：排除只認三類硬排除（他牌／服務承諾／純編號），
+// 其餘 AI 想排除的、只要是競品原文出現過的詞一律「救回」字池（收窄過度排除，保護賣點屬性詞）。
+// picked 過 substring 鐵律＋涵蓋去重＋獨立計次；excluded 理由改成教員工的句式。
+export function sanitizeRationale(rationale, competitors) {
   const r = rationale || {}
-  const rawPicked = Array.isArray(r.picked) ? r.picked : []
-  // 只留「競品原文出現過」且「非品牌黑名單」的詞
-  const validWords = rawPicked
-    .map((x) => (x && isStr(x.keyword) ? x.keyword.trim() : ''))
-    .filter((k) => k && isFromTitles(k, competitors) && blacklistHits(k).length === 0)
-  const kept = coverageDedup(validWords)
+  const pickedWords = []
+  const pickedSet = new Set()
   const typeOf = {}
-  for (const x of rawPicked) if (x && isStr(x.keyword)) typeOf[x.keyword.trim()] = x.type || ''
-  const picked = kept.map((k) => ({ keyword: k, type: typeOf[k] || '', count: countIndependent(k, competitors, kept) }))
-  picked.sort((a, b) => b.count - a.count)
-
   const excluded = []
-  const seen = new Set()
-  const pushExcluded = (keyword, reason) => {
+  const seenEx = new Set()
+  const addExcluded = (keyword, reason) => {
     const k = String(keyword || '').trim()
-    if (k && !seen.has(k)) {
-      seen.add(k)
+    if (k && !seenEx.has(k)) {
+      seenEx.add(k)
       excluded.push({ keyword: k, reason })
     }
   }
-  for (const x of Array.isArray(r.excluded) ? r.excluded : []) {
-    if (x && isStr(x.keyword)) pushExcluded(x.keyword, x.reason || '與本品無關')
+  // AI 的 picked 與 excluded 全部丟進同一套後端判定
+  const consider = (keyword, aiType) => {
+    const kw = String(keyword || '').trim()
+    if (!kw) return
+    const cls = classifyExclusion(kw)
+    if (cls.exclude) {
+      addExcluded(kw, cls.reason) // 硬排除三類 → excluded（教學理由）
+      return
+    }
+    // 非硬排除 → 只要競品原文出現過就救回字池（即使 AI 想排除）
+    if (isFromTitles(kw, competitors) && !pickedSet.has(kw)) {
+      pickedSet.add(kw)
+      pickedWords.push(kw)
+      if (aiType) typeOf[kw] = aiType
+    }
   }
-  // AI 若把品牌詞放進 picked，強制改列 excluded
-  for (const x of rawPicked) {
-    if (x && isStr(x.keyword) && blacklistHits(x.keyword).length > 0) pushExcluded(x.keyword, '他牌品牌詞')
-  }
+  for (const x of Array.isArray(r.picked) ? r.picked : []) if (x && isStr(x.keyword)) consider(x.keyword, x.type)
+  for (const x of Array.isArray(r.excluded) ? r.excluded : []) if (x && isStr(x.keyword)) consider(x.keyword, '')
 
-  const main = isStr(r.main) && isFromTitles(r.main.trim(), competitors) ? r.main.trim() : picked[0] ? picked[0].keyword : ''
+  const kept = coverageDedup(pickedWords)
+  const picked = kept.map((k) => ({ keyword: k, type: typeOf[k] || '', count: countIndependent(k, competitors, kept) }))
+  picked.sort((a, b) => b.count - a.count)
+
+  const mainOk =
+    isStr(r.main) && isFromTitles(r.main.trim(), competitors) && !classifyExclusion(r.main.trim()).exclude
+  const main = mainOk ? r.main.trim() : picked[0] ? picked[0].keyword : ''
   return { main, picked, excluded }
 }
 

@@ -29,6 +29,49 @@ export function blacklistHits(text) {
   return BRAND_BLACKLIST.filter((b) => lower.includes(b.toLowerCase()))
 }
 
+// 服務承諾詞：只能來自使用者「必埋詞」，AI 不得自行加入標題。
+export const SERVICE_HINTS = [
+  '現貨',
+  '免運',
+  '隔日到貨',
+  '當日',
+  '24H',
+  '快速出貨',
+  '熱銷',
+  '熱賣',
+  'SGS',
+  '檢驗',
+  '認證',
+  '贈品',
+  '買一送',
+  '滿額',
+  '免費',
+  '特價',
+  '限量',
+  '促銷',
+]
+
+// 純編號/雜訊：競品內部型號、序號（如 0415、A123），對搜尋沒意義。含中文一律不算。
+export function isPureCode(kw) {
+  const s = String(kw || '').trim()
+  if (!s || /[一-鿿]/.test(s)) return false
+  if (/^\d{4,}$/.test(s)) return true // 4 位以上純數字（316 這種 3 位規格詞不算）
+  if (/^[A-Za-z]{1,4}-?\d{2,}$/.test(s)) return true // 型號 A123 / XY-100
+  return false
+}
+
+// 排除分類（收窄版）：只硬排除三類——他牌品牌詞／服務承諾詞／純編號雜訊；其餘一律保留進字池。
+// 理由寫成「教員工」的句式。exclude=false 代表該保留（即使 AI 想排除，也救回）。
+export function classifyExclusion(keyword) {
+  const kw = String(keyword || '').trim()
+  if (!kw) return { exclude: true, reason: '空白' }
+  if (blacklistHits(kw).length) return { exclude: true, reason: '他牌品牌詞，用了會被蝦皮判蹭流量違規' }
+  if (SERVICE_HINTS.some((s) => kw.toUpperCase().includes(s.toUpperCase())))
+    return { exclude: true, reason: '服務承諾詞，屬實請填進必埋詞' }
+  if (isPureCode(kw)) return { exclude: true, reason: '競品內部編號，對搜尋沒意義' }
+  return { exclude: false, reason: '' }
+}
+
 // 鐵律：關鍵字須逐字出現在任一競品標題原文中。
 export function isFromTitles(kw, titles) {
   const clean = normalizeTitles(titles)
