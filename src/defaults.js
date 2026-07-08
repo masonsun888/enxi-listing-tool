@@ -35,7 +35,8 @@ export const makeEmptyWork = () => ({
   nine: null,
   // 新品一鍵上架文案：{ mainKeyword, competitorTitles, result, checks }
   nineCopy: null,
-  // 優化舊品·卡1：{ currentTitle, competitorTitles, mustInclude[], titleResults[], rationale, shownIdx }
+  // 優化舊品·卡1+卡2：{ currentTitle, competitorTitles, mustInclude[], titleResults[], rationale, shownIdx,
+  //   introResults[], introAux[], introShownIdx }（內文前100字跟標題同一次呼叫附贈）
   optimize: null,
   // 白牌定價卡的「你想賣」欄位（cost 沿用上面的 cost）
   nineSellPrice: '',

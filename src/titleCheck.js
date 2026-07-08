@@ -4,6 +4,8 @@
 export const TITLE_MAX = 60
 export const TITLE_MIN = 55
 export const MAIN_KW_FRONT = 10
+export const INTRO_MAIN_FRONT = 30
+export const INTRO_MIN = 80
 
 // 與 worker/copy.js FORBIDDEN_WORDS 同步
 export const FORBIDDEN_WORDS = [
@@ -71,6 +73,35 @@ export function checkTitle(title, { main = '', mustInclude = [] } = {}) {
     forbiddenHits: FORBIDDEN_WORDS.filter((w) => t.includes(w)),
     repeats: [m, ...must].filter((k) => k && occurrences(t, k) > 2),
   }
+}
+
+// 內文前 100 字品檢（與 worker/copy.js buildIntroChecks 同一套）。
+export function checkIntro(intro, { main = '', aux = [] } = {}) {
+  const t = String(intro || '')
+  const arr = [...t]
+  const first30 = arr.slice(0, INTRO_MAIN_FRONT).join('')
+  const first100 = arr.slice(0, 100).join('')
+  const m = String(main || '').trim()
+  const uniq = [...new Set([m, ...aux.map((s) => String(s || '').trim())].filter(Boolean))]
+  return {
+    len: arr.length,
+    tooShort: arr.length < INTRO_MIN,
+    mainFront: m ? first30.includes(m) : null,
+    stacking: uniq.filter((k) => first100.split(k).length - 1 > 2),
+    forbiddenHits: FORBIDDEN_WORDS.filter((w) => t.includes(w)),
+    blacklistHits: blacklistHits(t),
+  }
+}
+
+export function introMessages(c) {
+  if (!c) return []
+  const msgs = []
+  if (c.tooShort) msgs.push(`只有 ${c.len} 字，前 100 字要鋪好鋪滿`)
+  if (c.mainFront === false) msgs.push(`主關鍵字不在前 ${INTRO_MAIN_FRONT} 字，往前挪`)
+  if (c.stacking && c.stacking.length) msgs.push(`「${c.stacking.join('、')}」在前 100 字塞太多次（>2）`)
+  if (c.blacklistHits && c.blacklistHits.length) msgs.push(`有他牌詞：${c.blacklistHits.join('、')}，刪掉`)
+  if (c.forbiddenHits && c.forbiddenHits.length) msgs.push(`有禁字：${c.forbiddenHits.join('、')}，刪掉`)
+  return msgs
 }
 
 // 品檢 → 給 UI 用的「一句怎麼修」列表（全過回空陣列）。
