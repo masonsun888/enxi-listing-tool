@@ -4,6 +4,7 @@
 
 import { handleAnalyze, buildBudget } from './analyze.js'
 import { handleCopy } from './copy.js'
+import { handleKeywords } from './keywords.js'
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' }
 const PREFIX = 'product:'
@@ -39,9 +40,14 @@ async function handleApi(request, env, url) {
     return handleAnalyze(request, env)
   }
 
-  // /api/copy：一鍵上架文案（純文字呼叫，不需要 KV）
+  // /api/copy：一鍵上架文案／優化舊品標題（純文字呼叫，不需要 KV）
   if (url.pathname === '/api/copy' && request.method === 'POST') {
     return handleCopy(request, env)
+  }
+
+  // /api/keywords：優化舊品·卡1 從競品標題萃取關鍵字候選（純文字呼叫，不需要 KV）
+  if (url.pathname === '/api/keywords' && request.method === 'POST') {
+    return handleKeywords(request, env)
   }
 
   // /api/usage：本月 AI 分析額度（前端進度條用）

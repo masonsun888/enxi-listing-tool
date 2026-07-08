@@ -33,8 +33,10 @@ export const makeEmptyWork = () => ({
   specBottomWidth: '',
   // 新品九圖：{ analysis, palettePick, customMainTitle, mainTitlePick, heroVariant, done[9], optionDone, copiedSlots }
   nine: null,
-  // 白牌一鍵上架文案：{ mainKeyword, competitorTitles, result, checks }
+  // 新品一鍵上架文案：{ mainKeyword, competitorTitles, result, checks }
   nineCopy: null,
+  // 優化舊品：{ currentTitle, competitorTitles, candidates[], suggested, mainKw, auxKws[], titleResults[], titleChecks[] }
+  optimize: null,
   // 白牌定價卡的「你想賣」欄位（cost 沿用上面的 cost）
   nineSellPrice: '',
 })
