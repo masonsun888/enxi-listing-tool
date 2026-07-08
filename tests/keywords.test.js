@@ -7,6 +7,8 @@ import {
   countIndependent,
   isFromTitles,
   BRAND_BLACKLIST,
+  classifyExclusion,
+  isPureCode,
 } from '../worker/keywords.js'
 
 test('normalizeTitles：陣列或整段換行都轉成非空字串陣列', () => {
@@ -42,4 +44,28 @@ test('isFromTitles：substring 鐵律', () => {
   assert.equal(isFromTitles('保溫杯', titles), true)
   assert.equal(isFromTitles('露營', titles), true)
   assert.equal(isFromTitles('陶瓷', titles), false)
+})
+
+test('isPureCode：純編號才算，規格數字與中文詞不算', () => {
+  assert.equal(isPureCode('0415'), true) // 4 位純數字
+  assert.equal(isPureCode('A123'), true) // 型號
+  assert.equal(isPureCode('316'), false) // 3 位規格數字保留
+  assert.equal(isPureCode('保溫杯'), false)
+  assert.equal(isPureCode('脫模神器'), false)
+})
+
+test('classifyExclusion（收窄排除）：只硬排他牌/服務/編號，屬性賣點詞一律保留', () => {
+  // 他牌
+  assert.equal(classifyExclusion('膳魔師').exclude, true)
+  assert.match(classifyExclusion('膳魔師').reason, /他牌/)
+  // 服務承諾詞
+  assert.equal(classifyExclusion('現貨').exclude, true)
+  assert.match(classifyExclusion('免運').reason, /服務承諾/)
+  // 純編號
+  assert.equal(classifyExclusion('0415').exclude, true)
+  assert.match(classifyExclusion('0415').reason, /編號/)
+  // 賣點/屬性詞「不得」被排除（收窄的重點）
+  assert.equal(classifyExclusion('脫模神器').exclude, false)
+  assert.equal(classifyExclusion('省空間').exclude, false)
+  assert.equal(classifyExclusion('316不鏽鋼').exclude, false)
 })

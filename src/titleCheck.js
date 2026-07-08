@@ -2,7 +2,7 @@
 // 用途：員工直接編輯候選標題時，即時算品檢，不用再打後端。
 
 export const TITLE_MAX = 60
-export const TITLE_MIN = 50
+export const TITLE_MIN = 55
 export const MAIN_KW_FRONT = 10
 
 // 與 worker/copy.js FORBIDDEN_WORDS 同步

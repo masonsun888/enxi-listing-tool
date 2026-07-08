@@ -91,7 +91,7 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
       const data = await res.json()
       if (data.budget) setBudget(data.budget)
       if (!res.ok) throw new Error(data.error || 'AI 忙線中，再按一次')
-      update({ titleResults: data.titles || [], rationale: data.rationale || null })
+      update({ titleResults: data.titles || [], rationale: data.rationale || null, shownIdx: 0 })
     } catch (err) {
       setError(String(err && err.message ? err.message : err))
     } finally {
@@ -167,7 +167,11 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
         <label className="mb-1 mt-4 block text-sm font-bold text-ink">
           必埋詞（選填，最多 {MUST_MAX} 個）
         </label>
-        <p className="mb-1.5 text-xs text-muted">這個品要強調且「屬實」的詞：贈品、SGS 檢測、隔日到貨…（沒有就留空）</p>
+        <p className="mb-1.5 text-xs text-muted">
+          這個品要強調且「屬實」的詞：贈品、SGS 檢測、隔日到貨…（沒有就留空）。
+          <br />
+          必埋詞會「一字不差」放進標題，送出前檢查錯字。
+        </p>
         <div className="flex gap-2">
           <input
             type="text"
@@ -214,25 +218,30 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
           disabled={!(opt.competitorTitles || '').trim() || loading || overBudget}
           className="mt-4 w-full rounded-[8px] bg-primary py-3 text-lg font-bold text-white transition active:scale-[0.98] disabled:opacity-40"
         >
-          {loading ? '🤖 產生優化標題中…' : '✍️ 產生優化標題'}
+          {loading ? '🤖 AI 寫標題中…' : titles.length > 0 ? '再寫一次（老闆再付一次錢 💸）' : '🤖 AI 幫你寫標題'}
         </button>
+        <p className="mt-1 text-center text-xs text-muted">
+          按一次老闆掏一次錢（約 NT$0.5）💰 競品貼好貼滿再按，一次到位
+        </p>
         {overBudget && <p className="mt-2 text-center text-sm font-bold text-rose-600">本月 AI 額度已用完</p>}
 
-        {/* 標題候選（可直接編輯，即時品檢） */}
-        {titles.length > 0 && (
-          <div className="mt-4 space-y-3">
-            <p className="text-sm font-bold text-ink">
-              優化標題候選（可直接改，改完再複製）
-            </p>
-            {titles.map((t, i) => {
-              const c = checkTitle(t, { main, mustInclude })
-              const msgs = checkMessages(c)
-              const ok = msgs.length === 0
-              return (
-                <div key={i} className="rounded-[8px] border border-line p-3">
+        {/* AI 寫好的標題：只顯示排序第一的一個，「換一句」輪替備選（不重打、不花錢） */}
+        {titles.length > 0 &&
+          (() => {
+            const idx = Math.min(opt.shownIdx || 0, titles.length - 1)
+            const t = titles[idx]
+            const c = checkTitle(t, { main, mustInclude })
+            const msgs = checkMessages(c)
+            const ok = msgs.length === 0
+            const hasMore = idx < titles.length - 1
+            const multi = titles.length > 1
+            return (
+              <div className="mt-4 space-y-3">
+                <p className="text-sm font-bold text-ink">AI 寫好的標題（不滿意可直接改）</p>
+                <div className="rounded-[8px] border border-line p-3">
                   <div className="mb-1 flex items-center justify-between">
                     <span className={`font-mono text-xs ${c.over || c.tooShort ? 'font-bold text-rose-600' : 'text-muted'}`}>
-                      {c.len}/{TITLE_MAX} 字
+                      {c.len}/{TITLE_MAX} 字{multi ? `　（第 ${idx + 1}/${titles.length} 句）` : ''}
                     </span>
                     <span className={`text-xs font-bold ${ok ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {ok ? '✓ 全過' : '✕ 有問題'}
@@ -241,7 +250,7 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
                   <textarea
                     rows={2}
                     value={t}
-                    onChange={(e) => editTitle(i, e.target.value)}
+                    onChange={(e) => editTitle(idx, e.target.value)}
                     className="w-full resize-none rounded-[8px] border border-line bg-surface p-2.5 text-base text-ink focus:border-primary focus:outline-none"
                   />
                   {msgs.length > 0 && (
@@ -253,62 +262,81 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
                       ))}
                     </ul>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => copyTitle(t, i)}
-                    className={`mt-2 w-full rounded-[8px] py-2.5 text-base font-bold text-white transition active:scale-[0.98] ${
-                      copiedIdx === i ? 'bg-emerald-500' : 'bg-ink'
-                    }`}
-                  >
-                    {copiedIdx === i ? '✅ 已複製' : '📋 複製這個'}
-                  </button>
-                </div>
-              )
-            })}
-
-            {/* 選字依據（抽查用，預設收合） */}
-            {rationale && (
-              <details className="rounded-[8px] border border-line bg-bg/40 px-3 py-2">
-                <summary className="cursor-pointer text-sm font-bold text-muted">🔎 選字依據（老闆抽查用）</summary>
-                <div className="mt-2 space-y-2 text-sm">
-                  {rationale.main && (
-                    <p className="text-ink">
-                      主關鍵字：<span className="font-bold">{rationale.main}</span>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => copyTitle(t, idx)}
+                      className={`flex-1 rounded-[8px] py-2.5 text-base font-bold text-white transition active:scale-[0.98] ${
+                        copiedIdx === idx ? 'bg-emerald-500' : 'bg-ink'
+                      }`}
+                    >
+                      {copiedIdx === idx ? '✅ 已複製' : '📋 複製這個'}
+                    </button>
+                    {multi && (
+                      <button
+                        type="button"
+                        onClick={() => hasMore && update({ shownIdx: idx + 1 })}
+                        disabled={!hasMore}
+                        className="shrink-0 rounded-[8px] border border-line px-4 py-2.5 text-base font-bold text-ink active:scale-95 disabled:opacity-40"
+                      >
+                        🔄 換一句
+                      </button>
+                    )}
+                  </div>
+                  {multi && (
+                    <p className="mt-1 text-xs text-muted">
+                      {hasMore ? '免費換，儘管按' : '備選用完了，重新產生要花老闆的錢 💸'}
                     </p>
                   )}
-                  {Array.isArray(rationale.picked) && rationale.picked.length > 0 && (
-                    <div>
-                      <p className="text-xs font-bold text-muted">選入：</p>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {rationale.picked.map((p, i) => (
-                          <span key={i} className="rounded-full bg-line/50 px-2 py-0.5 text-xs text-ink">
-                            {p.keyword}
-                            <span className="text-muted">
-                              {' '}
-                              ·{p.type || '—'}·{p.count}次
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {Array.isArray(rationale.excluded) && rationale.excluded.length > 0 && (
-                    <div>
-                      <p className="text-xs font-bold text-muted">排除：</p>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {rationale.excluded.map((p, i) => (
-                          <span key={i} className="rounded-full bg-rose-50 px-2 py-0.5 text-xs text-rose-600">
-                            {p.keyword} <span className="opacity-70">（{p.reason}）</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
-              </details>
-            )}
-          </div>
-        )}
+
+                {/* 為什麼這樣選字（教員工用，預設收合） */}
+                {rationale && (
+                  <details className="rounded-[8px] border border-line bg-bg/40 px-3 py-2">
+                    <summary className="cursor-pointer text-sm font-bold text-muted">💡 為什麼這樣選字</summary>
+                    <div className="mt-2 space-y-2 text-sm">
+                      <p className="text-xs leading-relaxed text-muted">
+                        主關鍵字放最前面、蝦皮權重最高；長複合詞（如「捏捏樂製冰桶」）已涵蓋它的短詞（「製冰桶」），不重複佔字數。
+                      </p>
+                      {rationale.main && (
+                        <p className="text-ink">
+                          主關鍵字：<span className="font-bold">{rationale.main}</span>
+                        </p>
+                      )}
+                      {Array.isArray(rationale.picked) && rationale.picked.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-muted">選入：</p>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {rationale.picked.map((p, i) => (
+                              <span key={i} className="rounded-full bg-line/50 px-2 py-0.5 text-xs text-ink">
+                                {p.keyword}
+                                <span className="text-muted">
+                                  {' '}
+                                  ·{p.type || '—'}·{p.count}次
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {Array.isArray(rationale.excluded) && rationale.excluded.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-muted">排除（為什麼不用）：</p>
+                          <ul className="mt-1 space-y-0.5">
+                            {rationale.excluded.map((p, i) => (
+                              <li key={i} className="text-xs text-muted">
+                                <span className="font-bold text-ink">{p.keyword}</span> → {p.reason}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )
+          })()}
 
         {error && <p className="mt-2 text-center text-sm font-bold text-rose-600">{error}</p>}
       </Card>
