@@ -20,6 +20,7 @@ export const TITLE_MIN = 55
 export const MAIN_KW_FRONT = 10
 const MUST_INCLUDE_MAX = 4
 const REPAIR_LIMIT = 2 // 品檢不過的重修上限
+export const CANDIDATE_COUNT = 3 // 產給員工的候選數（不加到 5：品質靠「全合格」不靠數量）
 
 // 禁字黑名單（措辭優化階段再跟 Mason 一起調）
 export const FORBIDDEN_WORDS = [
@@ -61,7 +62,7 @@ const COPY_SYSTEM_PROMPT = `你是「恩希貿易」的蝦皮上架文案引擎�
 { "shopee_title": "…", "golden_intro": "…", "pain_points": ["😩 …", "🙌 …"], "spec_lines": ["材質：…"], "aftersale": ["【包裹的小保險｜…】…", "【拆禮物的小儀式｜…】…", "【關於完美主義｜…】…"], "hashtags": ["#…"] }`
 
 // 優化舊品·卡1：單次呼叫完成「萃取→分類→選字→組標題」，回 titles + rationale（選字依據）。
-const OPTIMIZE_TITLE_SYSTEM_PROMPT = `你是蝦皮標題優化引擎。使用者會給商品品名、（選填）現有標題、多條競品標題、（選填）必埋詞。你要「一次」完成：從競品標題萃取關鍵字 → 分類 → 選字 → 組出 2–3 個「塞好塞滿」的優化標題。
+const OPTIMIZE_TITLE_SYSTEM_PROMPT = `你是蝦皮標題優化引擎。使用者會給商品品名、（選填）現有標題、多條競品標題、（選填）必埋詞。你要「一次」完成：從競品標題萃取關鍵字 → 分類 → 選字 → 組出 3 個「塞好塞滿」的優化標題。
 
 【萃取與分類】把競品標題出現過的詞分四類：品類詞、屬性詞、場景詞、服務詞。
 
@@ -84,7 +85,7 @@ const OPTIMIZE_TITLE_SYSTEM_PROMPT = `你是蝦皮標題優化引擎。使用者
 - 不編造規格／材質／認證。
 - 禁字（一個都不准）：${FORBIDDEN_WORDS.join('、')}。
 
-只輸出合法 JSON（不要 markdown 圍欄、不要解說）：
+每個標題務必落在 ${TITLE_MIN}–${TITLE_MAX} 字，寧可多塞高頻詞也不要短於 ${TITLE_MIN}。只輸出合法 JSON（不要 markdown 圍欄、不要解說）：
 { "titles": ["候選1", "候選2", "候選3"], "rationale": { "main": "主品類詞", "picked": [{ "keyword": "詞", "type": "品類|屬性|場景|服務", "count": 次數 }], "excluded": [{ "keyword": "詞", "reason": "他牌品牌詞|被涵蓋|與本品無關" }] } }`
 
 function json(data, status = 200) {
@@ -307,9 +308,54 @@ function buildTitleUserText(body, competitors, mustInclude) {
 
 function parseTitleResult(raw) {
   const p = parseAnalysisText(raw)
-  const titles = p && Array.isArray(p.titles) ? p.titles.filter(isStr).slice(0, 3) : []
+  const titles = p && Array.isArray(p.titles) ? p.titles.filter(isStr).slice(0, CANDIDATE_COUNT) : []
   const rationale = p && p.rationale && typeof p.rationale === 'object' ? p.rationale : null
   return { titles, rationale }
+}
+
+// 字池：優先用 sanitizeRationale 的 picked（已過濾/去重/依次數排序）；不足再用競品切詞補。
+function buildPool(pickedWords, competitors) {
+  const pool = [...pickedWords]
+  const toks = competitors
+    .flatMap((t) => t.split(/\s+/))
+    .map((s) => s.trim())
+    .filter((k) => k && isFromTitles(k, competitors) && !classifyExclusion(k).exclude)
+  for (const k of coverageDedup(toks)) if (!pool.includes(k)) pool.push(k)
+  return pool
+}
+
+// 就地把標題補到合格：先補齊必埋詞，再從字池補高頻詞到 ≥TITLE_MIN（不超過 TITLE_MAX、不重複）。
+export function enforceTitle(title, { main = '', mustInclude = [], pool = [] } = {}) {
+  let t = String(title || '').trim()
+  for (const m of mustInclude) {
+    const k = String(m || '').trim()
+    if (k && !t.includes(k) && titleLen(`${t} ${k}`) <= TITLE_MAX) t = `${t} ${k}`
+  }
+  for (const kw of pool) {
+    if (titleLen(t) >= TITLE_MIN) break
+    const k = String(kw || '').trim()
+    if (!k || t.includes(k) || blacklistHits(k).length) continue
+    const cand = `${t} ${k}`
+    if (titleLen(cand) > TITLE_MAX) continue
+    t = cand
+  }
+  return t
+}
+
+// 收斂候選：每句就地補字→只留「全過」的→去重→上限 count。寧缺勿濫，絕不輸出不合格的。
+export function finalizeTitles(rawTitles, { main = '', mustInclude = [], pool = [], count = CANDIDATE_COUNT } = {}) {
+  const out = []
+  const seen = new Set()
+  for (const raw of Array.isArray(rawTitles) ? rawTitles : []) {
+    const t = enforceTitle(raw, { main, mustInclude, pool })
+    if (seen.has(t)) continue
+    if (titleOk(buildTitleChecks(t, { main, mustInclude }))) {
+      seen.add(t)
+      out.push(t)
+    }
+    if (out.length >= count) break
+  }
+  return out
 }
 
 // 後端重算 rationale（不信 AI 自報）：排除只認三類硬排除（他牌／服務承諾／純編號），
@@ -391,37 +437,41 @@ async function handleOptimizeTitle(env, body) {
     return json({ error: 'AI 產標題失敗：' + String(err && err.message ? err.message : err) }, 502)
   }
 
-  const main = rationale && isStr(rationale.main) ? rationale.main.trim() : ''
-  const checkAll = (arr) => arr.map((t) => buildTitleChecks(t, { main, mustInclude }))
+  // 收斂：每句就地補字→只留全過的。湊不滿 CANDIDATE_COUNT 就重修，最多 REPAIR_LIMIT 次。
+  function finalize() {
+    const san = sanitizeRationale(rationale, competitors)
+    const pool = buildPool(san.picked.map((p) => p.keyword), competitors)
+    const list = finalizeTitles(titles, { main: san.main, mustInclude, pool, count: CANDIDATE_COUNT })
+    return { san, list }
+  }
 
-  // 品檢不過就重修，最多 REPAIR_LIMIT 次。
+  let { san, list } = finalize()
   let tries = 0
-  while (tries < REPAIR_LIMIT && (titles.length === 0 || checkAll(titles).some((c) => !titleOk(c)))) {
+  while (tries < REPAIR_LIMIT && list.length < CANDIDATE_COUNT) {
     tries += 1
     try {
       messages.push({
         role: 'user',
-        content: `上一版有標題不合格。請重出 2–3 個，每個都符合：${TITLE_MIN}–${TITLE_MAX} 字、主關鍵字放前 ${MAIN_KW_FRONT} 字內、必埋詞（${mustInclude.join('、') || '無'}）全部出現、無任何品牌名、無禁字、同一詞不超過 2 次。只輸出原本的 JSON 結構（titles＋rationale）。`,
+        content: `只給了 ${list.length} 個合格標題，請重出 ${CANDIDATE_COUNT} 個，每個都符合：${TITLE_MIN}–${TITLE_MAX} 字、主關鍵字放前 ${MAIN_KW_FRONT} 字內、必埋詞（${mustInclude.join('、') || '無'}）全部出現、無任何品牌名、無禁字、同一詞不超過 2 次。字數不足就補競品次高頻變體。只輸出原本 JSON 結構（titles＋rationale）。`,
       })
       const retryRaw = await call(messages)
       const parsed = parseTitleResult(retryRaw)
-      if (parsed.titles.length) {
-        titles = parsed.titles
-        if (parsed.rationale) rationale = parsed.rationale
-      }
+      if (parsed.titles.length) titles = parsed.titles
+      if (parsed.rationale) rationale = parsed.rationale
       messages.push({ role: 'assistant', content: retryRaw })
+      ;({ san, list } = finalize())
     } catch {
       break // 沿用上一版
     }
   }
 
   await addUsage(env, spentInput, spentOutput)
-  if (titles.length === 0) return json({ error: 'AI 忙線中，再按一次', budget: await buildBudget(env) }, 502)
-  const finalMain = rationale && isStr(rationale.main) ? rationale.main.trim() : main
+  // 寧缺勿濫：list 全部保證全過；一個都湊不出才回錯。
+  if (list.length === 0) return json({ error: 'AI 忙線中，再按一次', budget: await buildBudget(env) }, 502)
   return json({
-    titles,
-    titleChecks: titles.map((t) => buildTitleChecks(t, { main: finalMain, mustInclude })),
-    rationale: sanitizeRationale(rationale, competitors),
+    titles: list,
+    titleChecks: list.map((t) => buildTitleChecks(t, { main: san.main, mustInclude })),
+    rationale: san,
     budget: await buildBudget(env),
   })
 }
