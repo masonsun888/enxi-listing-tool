@@ -161,7 +161,10 @@ export default function SavedProducts({
     if (mode === 'loading') return
     const hasNine = work.nine && work.nine.analysis
     const hasCopy = work.nineCopy && work.nineCopy.result
-    if (!hasNine && !hasCopy) return
+    const o = work.optimize
+    const hasOptimize =
+      o && ((o.candidates && o.candidates.length > 0) || (o.competitorTitles || '').trim())
+    if (!hasNine && !hasCopy && !hasOptimize) return
     if (!product.name.trim()) return
     clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(() => saveCurrent(true), 1500)

@@ -6,6 +6,7 @@ import BodyTab from './components/BodyTab.jsx'
 import ImageTab from './components/ImageTab.jsx'
 import PriceTab from './components/PriceTab.jsx'
 import NinePage from './components/NinePage.jsx'
+import OptimizePage from './components/OptimizePage.jsx'
 import Footer from './components/Footer.jsx'
 import LockScreen from './components/LockScreen.jsx'
 import { makeDefaultProduct, makeNineDefaultProduct, makeEmptyWork } from './defaults.js'
@@ -109,6 +110,7 @@ export default function App() {
 
   // 側欄用哪個空白預設，取決於目前模式（optimize 沿用新品的空白）。
   const blankForMode = mode === 'classic' ? makeDefaultProduct : makeNineDefaultProduct
+  const overBudget = !!(budget && budget.tracked && budget.usedTWD >= budget.limitTWD)
 
   return (
     <div className="min-h-screen">
@@ -168,14 +170,14 @@ export default function App() {
             )}
 
             {mode === 'optimize' && (
-              <section className="rounded-[12px] border border-line bg-surface p-8 text-center shadow-sm">
-                <h2 className="text-xl font-bold text-ink">🔧 優化舊品</h2>
-                <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
-                  給在售品局部補強的三張卡：① 標題關鍵字優化 ② 內文前 100 字鋪字 ③ Hero 單張重製。
-                  <br />
-                  下一版上線，敬請期待。
-                </p>
-              </section>
+              <OptimizePage
+                product={product}
+                work={work}
+                setWork={setWork}
+                password={password}
+                setBudget={setBudget}
+                overBudget={overBudget}
+              />
             )}
 
             {mode === 'classic' && (

@@ -1,6 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validateCopy, buildChecks, titleLen, FORBIDDEN_WORDS } from '../worker/copy.js'
+import {
+  validateCopy,
+  buildChecks,
+  titleLen,
+  FORBIDDEN_WORDS,
+  buildTitleChecks,
+  TITLE_MAX,
+  MAIN_KW_FRONT,
+} from '../worker/copy.js'
 
 function makeValidCopy() {
   return {
@@ -66,4 +74,34 @@ test('buildChecks：60 字上限、禁字、公板格式、主關鍵字前置', 
 test('FORBIDDEN_WORDS：黑名單存在且都是字串', () => {
   assert.ok(FORBIDDEN_WORDS.length >= 5)
   assert.ok(FORBIDDEN_WORDS.every((w) => typeof w === 'string' && w.length > 0))
+})
+
+test('buildTitleChecks（優化標題品檢）：字數／主關鍵字前置／輔助字齊全／禁字', () => {
+  assert.equal(TITLE_MAX, 60)
+  assert.equal(MAIN_KW_FRONT, 10)
+
+  const ok = buildTitleChecks('保溫杯 316不鏽鋼 大容量 保冷保溫 隨行杯 辦公室車用', {
+    main: '保溫杯',
+    aux: ['316不鏽鋼', '大容量'],
+  })
+  assert.equal(ok.over, false)
+  assert.equal(ok.mainFirst, true) // 主關鍵字在最前
+  assert.deepEqual(ok.auxMissing, []) // 輔助字都在
+  assert.deepEqual(ok.forbiddenHits, [])
+
+  // 主關鍵字不在前 10 字 → mainFirst=false
+  const late = buildTitleChecks('大容量隨行杯不鏽鋼露營保冷保溫杯', { main: '保溫杯', aux: [] })
+  assert.equal(late.mainFirst, false)
+
+  // 缺輔助字、超長、含禁字
+  const bad = buildTitleChecks('保溫杯 ' + '長'.repeat(60) + ' 保證', {
+    main: '保溫杯',
+    aux: ['316不鏽鋼', '大容量'],
+  })
+  assert.equal(bad.over, true)
+  assert.deepEqual(bad.auxMissing, ['316不鏽鋼', '大容量'])
+  assert.ok(bad.forbiddenHits.includes('保證'))
+
+  // 沒給主關鍵字 → mainFirst=null（不判定）
+  assert.equal(buildTitleChecks('隨便標題', {}).mainFirst, null)
 })
