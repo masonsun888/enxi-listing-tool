@@ -7,6 +7,7 @@ import {
   FORBIDDEN_WORDS,
   buildTitleChecks,
   TITLE_MAX,
+  TITLE_MIN,
   MAIN_KW_FRONT,
 } from '../worker/copy.js'
 
@@ -76,31 +77,41 @@ test('FORBIDDEN_WORDS：黑名單存在且都是字串', () => {
   assert.ok(FORBIDDEN_WORDS.every((w) => typeof w === 'string' && w.length > 0))
 })
 
-test('buildTitleChecks（優化標題品檢）：字數／主關鍵字前置／輔助字齊全／禁字', () => {
+test('buildTitleChecks（優化標題品檢）：字數 50–60／主字前置／必埋詞／黑名單／禁字／重複', () => {
   assert.equal(TITLE_MAX, 60)
+  assert.equal(TITLE_MIN, 50)
   assert.equal(MAIN_KW_FRONT, 10)
 
-  const ok = buildTitleChecks('保溫杯 316不鏽鋼 大容量 保冷保溫 隨行杯 辦公室車用', {
-    main: '保溫杯',
-    aux: ['316不鏽鋼', '大容量'],
-  })
+  // 53 字、主字前置、必埋詞齊全、無黑名單/禁字/重複
+  const good =
+    '保溫杯 316不鏽鋼 大容量 保冷保溫 露營隨行杯 辦公室車用水壺 贈品 送禮 交換禮物首選 通勤野餐水瓶'
+  const ok = buildTitleChecks(good, { main: '保溫杯', mustInclude: ['贈品'] })
   assert.equal(ok.over, false)
-  assert.equal(ok.mainFirst, true) // 主關鍵字在最前
-  assert.deepEqual(ok.auxMissing, []) // 輔助字都在
+  assert.equal(ok.tooShort, false)
+  assert.equal(ok.mainFirst, true)
+  assert.deepEqual(ok.mustMissing, [])
+  assert.deepEqual(ok.blacklistHits, [])
   assert.deepEqual(ok.forbiddenHits, [])
+  assert.deepEqual(ok.repeats, [])
 
-  // 主關鍵字不在前 10 字 → mainFirst=false
-  const late = buildTitleChecks('大容量隨行杯不鏽鋼露營保冷保溫杯', { main: '保溫杯', aux: [] })
-  assert.equal(late.mainFirst, false)
+  // 太短
+  assert.equal(buildTitleChecks('保溫杯 大容量', { main: '保溫杯' }).tooShort, true)
 
-  // 缺輔助字、超長、含禁字
-  const bad = buildTitleChecks('保溫杯 ' + '長'.repeat(60) + ' 保證', {
+  // 主字不在前 10 字
+  assert.equal(
+    buildTitleChecks('大容量隨行杯不鏽鋼露營保冷保溫杯', { main: '保溫杯' }).mainFirst,
+    false,
+  )
+
+  // 缺必埋詞、含品牌黑名單、含禁字、主字重複 3 次
+  const bad = buildTitleChecks('膳魔師保溫杯 保溫杯 保溫杯 保證好用', {
     main: '保溫杯',
-    aux: ['316不鏽鋼', '大容量'],
+    mustInclude: ['贈品', 'SGS'],
   })
-  assert.equal(bad.over, true)
-  assert.deepEqual(bad.auxMissing, ['316不鏽鋼', '大容量'])
+  assert.deepEqual(bad.mustMissing, ['贈品', 'SGS'])
+  assert.ok(bad.blacklistHits.includes('膳魔師'))
   assert.ok(bad.forbiddenHits.includes('保證'))
+  assert.ok(bad.repeats.includes('保溫杯')) // 出現 3 次 > 2
 
   // 沒給主關鍵字 → mainFirst=null（不判定）
   assert.equal(buildTitleChecks('隨便標題', {}).mainFirst, null)

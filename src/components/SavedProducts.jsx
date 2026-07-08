@@ -163,7 +163,7 @@ export default function SavedProducts({
     const hasCopy = work.nineCopy && work.nineCopy.result
     const o = work.optimize
     const hasOptimize =
-      o && ((o.candidates && o.candidates.length > 0) || (o.competitorTitles || '').trim())
+      o && ((o.titleResults && o.titleResults.length > 0) || (o.competitorTitles || '').trim())
     if (!hasNine && !hasCopy && !hasOptimize) return
     if (!product.name.trim()) return
     clearTimeout(autoSaveTimer.current)
