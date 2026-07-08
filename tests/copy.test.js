@@ -7,10 +7,15 @@ import {
   FORBIDDEN_WORDS,
   buildTitleChecks,
   sanitizeRationale,
+  enforceTitle,
+  finalizeTitles,
+  CANDIDATE_COUNT,
   TITLE_MAX,
   TITLE_MIN,
   MAIN_KW_FRONT,
 } from '../worker/copy.js'
+
+const POOL = ['大容量', '保冷保溫', '露營隨行杯', '辦公室車用水壺', '交換禮物首選', '通勤野餐水瓶', '上班族', '送禮', '矽膠杯', '派對冰塊盒']
 
 function makeValidCopy() {
   return {
@@ -120,6 +125,38 @@ test('buildTitleChecks（優化標題品檢）：字數 55–60／主字前置�
 
   // 沒給主關鍵字 → mainFirst=null（不判定）
   assert.equal(buildTitleChecks('隨便標題', {}).mainFirst, null)
+})
+
+test('enforceTitle：<55 就地補字到 55–60、補齊必埋詞', () => {
+  const padded = enforceTitle('保溫杯 316不鏽鋼', { main: '保溫杯', mustInclude: ['贈品'], pool: POOL })
+  const len = [...padded].length
+  assert.ok(len >= TITLE_MIN, `應 ≥${TITLE_MIN}，實際 ${len}`)
+  assert.ok(len <= TITLE_MAX, `應 ≤${TITLE_MAX}，實際 ${len}`)
+  assert.ok(padded.includes('贈品'), '必埋詞應補進去')
+  assert.ok(padded.startsWith('保溫杯'), '主關鍵字仍在最前')
+})
+
+test('finalizeTitles：只回全過的、上限 3、湊不滿就減量（絕不含不合格）', () => {
+  assert.equal(CANDIDATE_COUNT, 3)
+  const opts = { main: '保溫杯', mustInclude: ['贈品'], pool: POOL, count: CANDIDATE_COUNT }
+  // 第 1、2 句短 → 補字後合格；第 3 句超 60 → 補不回、必須被丟掉
+  const raw = ['保溫杯 316不鏽鋼', '保溫杯 大容量', '保溫杯 ' + '長'.repeat(70)]
+  const list = finalizeTitles(raw, opts)
+  assert.ok(list.length >= 1 && list.length <= CANDIDATE_COUNT)
+  // 每一句都必須全過
+  for (const t of list) {
+    const c = buildTitleChecks(t, { main: '保溫杯', mustInclude: ['贈品'] })
+    assert.equal(c.over, false)
+    assert.equal(c.tooShort, false)
+    assert.equal(c.mainFirst, true)
+    assert.deepEqual(c.mustMissing, [])
+    assert.deepEqual(c.blacklistHits, [])
+    assert.deepEqual(c.forbiddenHits, [])
+  }
+  // 超 60 那句不會出現在輸出
+  assert.ok(!list.some((t) => t.includes('長長長')))
+  // 只有 2 句可救 → 減量成 2（不硬湊第 3 個不合格）
+  assert.equal(list.length, 2)
 })
 
 test('必埋詞未逐字出現 → 品檢判不過（mustMissing 非空）', () => {

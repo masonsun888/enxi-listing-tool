@@ -233,7 +233,6 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
             const c = checkTitle(t, { main, mustInclude })
             const msgs = checkMessages(c)
             const ok = msgs.length === 0
-            const hasMore = idx < titles.length - 1
             const multi = titles.length > 1
             return (
               <div className="mt-4 space-y-3">
@@ -275,19 +274,14 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
                     {multi && (
                       <button
                         type="button"
-                        onClick={() => hasMore && update({ shownIdx: idx + 1 })}
-                        disabled={!hasMore}
-                        className="shrink-0 rounded-[8px] border border-line px-4 py-2.5 text-base font-bold text-ink active:scale-95 disabled:opacity-40"
+                        onClick={() => update({ shownIdx: (idx + 1) % titles.length })}
+                        className="shrink-0 rounded-[8px] border border-line px-4 py-2.5 text-base font-bold text-ink active:scale-95"
                       >
                         🔄 換一句
                       </button>
                     )}
                   </div>
-                  {multi && (
-                    <p className="mt-1 text-xs text-muted">
-                      {hasMore ? '免費換，儘管按' : '備選用完了，重新產生要花老闆的錢 💸'}
-                    </p>
-                  )}
+                  {multi && <p className="mt-1 text-xs text-muted">免費換，儘管按（循環切換，每句都能複製）</p>}
                 </div>
 
                 {/* 為什麼這樣選字（教員工用，預設收合） */}
