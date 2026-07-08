@@ -358,6 +358,43 @@ export function finalizeTitles(rawTitles, { main = '', mustInclude = [], pool = 
   return out
 }
 
+function rotate(arr, n) {
+  const len = arr.length
+  if (len === 0) return arr
+  const k = ((n % len) + len) % len
+  return arr.slice(k).concat(arr.slice(0, k))
+}
+
+// 湊不滿 count 時：用字池自己合成補足（主關鍵字打頭＋必埋詞＋輪替字池到 55–60）。
+// 每個 offset 換字池起點 → 產出不同的一句。字池夠大就能穩定補到 count；不夠才真減量。
+export function synthesizeTitles(existing, { main = '', mustInclude = [], pool = [], count = CANDIDATE_COUNT } = {}) {
+  const out = [...existing]
+  const seen = new Set(existing)
+  const base = String(main || pool[0] || '').trim()
+  if (!base) return out
+  const tries = Math.max(pool.length, 1) * 2
+  for (let offset = 0; out.length < count && offset < tries; offset++) {
+    let t = base
+    for (const m of mustInclude) {
+      const k = String(m || '').trim()
+      if (k && !t.includes(k) && titleLen(`${t} ${k}`) <= TITLE_MAX) t = `${t} ${k}`
+    }
+    for (const kw of rotate(pool, offset)) {
+      if (titleLen(t) >= TITLE_MIN) break
+      const k = String(kw || '').trim()
+      if (!k || t.includes(k) || blacklistHits(k).length) continue
+      if (titleLen(`${t} ${k}`) > TITLE_MAX) continue
+      t = `${t} ${k}`
+    }
+    if (seen.has(t)) continue
+    if (titleOk(buildTitleChecks(t, { main, mustInclude }))) {
+      seen.add(t)
+      out.push(t)
+    }
+  }
+  return out.slice(0, count)
+}
+
 // 後端重算 rationale（不信 AI 自報）：排除只認三類硬排除（他牌／服務承諾／純編號），
 // 其餘 AI 想排除的、只要是競品原文出現過的詞一律「救回」字池（收窄過度排除，保護賣點屬性詞）。
 // picked 過 substring 鐵律＋涵蓋去重＋獨立計次；excluded 理由改成教員工的句式。
@@ -437,11 +474,14 @@ async function handleOptimizeTitle(env, body) {
     return json({ error: 'AI 產標題失敗：' + String(err && err.message ? err.message : err) }, 502)
   }
 
-  // 收斂：每句就地補字→只留全過的。湊不滿 CANDIDATE_COUNT 就重修，最多 REPAIR_LIMIT 次。
+  // 收斂：每句就地補字→只留全過的→不夠 CANDIDATE_COUNT 就用字池合成補滿。仍不夠才重修。
   function finalize() {
     const san = sanitizeRationale(rationale, competitors)
     const pool = buildPool(san.picked.map((p) => p.keyword), competitors)
-    const list = finalizeTitles(titles, { main: san.main, mustInclude, pool, count: CANDIDATE_COUNT })
+    let list = finalizeTitles(titles, { main: san.main, mustInclude, pool, count: CANDIDATE_COUNT })
+    if (list.length < CANDIDATE_COUNT) {
+      list = synthesizeTitles(list, { main: san.main, mustInclude, pool, count: CANDIDATE_COUNT })
+    }
     return { san, list }
   }
 
