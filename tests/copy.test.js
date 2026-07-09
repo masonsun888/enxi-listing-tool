@@ -79,6 +79,16 @@ test('buildChecks：60 字上限、禁字、公板格式、主關鍵字前置', 
 
   // 沒指定主關鍵字 → 不判定
   assert.equal(buildChecks(makeValidCopy(), '').keywordFirst, null)
+
+  // 塞滿式：<55 字判 titleShort
+  const short = makeValidCopy()
+  short.shopee_title = '湯匙 不鏽鋼 好用' // 明顯 <55
+  assert.equal(buildChecks(short, '湯匙').titleShort, true)
+  // 內文前 30 字帶主關鍵字 → introKeywordFront true；沒帶 → false
+  const withIntro = makeValidCopy()
+  withIntro.golden_intro = '這支不鏽鋼湯匙一體成型好握好洗，吃飯更享受，快帶回家'
+  assert.equal(buildChecks(withIntro, '不鏽鋼湯匙').introKeywordFront, true)
+  assert.equal(buildChecks(makeValidCopy(), '316不鏽鋼湯匙').introKeywordFront, false)
 })
 
 test('buildIntroChecks（內文前100字品檢）：主字前30、禁堆疊、太短、禁字/黑名單', () => {

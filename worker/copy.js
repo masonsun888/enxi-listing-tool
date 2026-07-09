@@ -51,8 +51,8 @@ const COPY_SYSTEM_PROMPT = `你是「恩希貿易」的蝦皮上架文案引擎�
 - 不放品牌名、賣場名、活動網址。
 
 【輸出欄位】
-1. shopee_title：蝦皮標題，嚴格 ≤60 字元（中文 1 字＝1 字元，含空格）。主關鍵字放最前面，之後堆高搜尋量的品類關鍵字。
-2. golden_intro：黃金前段，100~150 字，前 30 字自然帶入主關鍵字，結尾一句行動呼籲。
+1. shopee_title：蝦皮標題，「塞好塞滿」${TITLE_MIN}–${TITLE_MAX} 字元（中文 1 字＝1 字元，含空格；不足就用高搜尋量的品類／屬性／賣點詞補到 ${TITLE_MIN}，不要短）。主關鍵字放最前面（前 ${MAIN_KW_FRONT} 字內），後段是關鍵字倉庫、用空格分隔堆疊；同一詞最多 2 次；不放品牌名。
+2. golden_intro：黃金前段（＝內文前 100 字），100~150 字。前 ${INTRO_MAIN_FRONT} 字自然帶入主關鍵字，前 100 字內再自然鋪 2~3 個高搜尋關鍵字（同詞 ≤2 次、不堆疊、要像賣家口語不是關鍵字清單），結尾一句行動呼籲。
 3. pain_points：2~3 段「痛點→解方」短文（字串陣列），每段以一個 emoji 開頭，像跟好朋友聊天、絕對不能是客服語。
    ❌ 錯誤示範：「採用人體工學設計的加長柄鋼絲刷，讓您輕鬆清潔」
    ✅ 正確示範：「洗鍋子根本是惡夢，手每次都油油的><，這支加長柄一握就到底，手完全不用碰到油」
@@ -178,17 +178,21 @@ export function validateCopy(c) {
 // 品檢不靠 AI 自覺：生成後用程式再掃一次。
 export function buildChecks(copy, mainKeyword = '') {
   const title = copy.shopee_title || ''
+  const intro = copy.golden_intro || ''
   const everything = JSON.stringify(copy)
   const kw = String(mainKeyword || '').trim()
+  const len = titleLen(title)
   return {
-    titleLen: titleLen(title),
-    titleOver: titleLen(title) > 60,
+    titleLen: len,
+    titleOver: len > TITLE_MAX,
+    titleShort: len < TITLE_MIN, // 塞滿式：<55 也算沒吃滿搜尋
     forbiddenHits: FORBIDDEN_WORDS.filter((w) => everything.includes(w)),
     aftersaleOk:
       Array.isArray(copy.aftersale) &&
       copy.aftersale.length === 3 &&
       copy.aftersale.every((s) => /^【.+｜.+】/.test(s)),
-    keywordFirst: kw ? title.slice(0, kw.length + 6).includes(kw) : null,
+    keywordFirst: kw ? startsWithin(title, kw, MAIN_KW_FRONT) : null,
+    introKeywordFront: kw ? [...intro].slice(0, INTRO_MAIN_FRONT).join('').includes(kw) : null, // 內文前30字含主關鍵字
   }
 }
 
@@ -303,11 +307,33 @@ export async function handleCopy(request, env) {
   await addUsage(env, spentInput, spentOutput)
 
   if (!copy) return json({ error: 'AI 忙線中，再按一次', budget: await buildBudget(env) }, 502)
+  // 塞滿式：標題若 <55 字，就地用字池（分析賣點/品類/hashtag＋競品詞）補到 55–60，不必再花錢重打。
+  if (titleLen(copy.shopee_title) < TITLE_MIN) {
+    const padded = enforceTitle(copy.shopee_title, { pool: buildCopyPool(body, copy) })
+    if (titleLen(padded) >= titleLen(copy.shopee_title)) copy.shopee_title = padded
+  }
   return json({
     copy,
     checks: buildChecks(copy, body.mainKeyword),
     budget: await buildBudget(env),
   })
+}
+
+// 新品九圖標題塞滿式的字池：分析賣點/品類 ＋ hashtag ＋（選填）競品詞；過黑名單/服務/編號濾除、涵蓋去重。
+function buildCopyPool(body, copy) {
+  const words = []
+  const h = body.hints || {}
+  if (isStr(h.category)) words.push(h.category)
+  if (Array.isArray(h.selling_points)) for (const sp of h.selling_points) if (sp && isStr(sp.title)) words.push(sp.title)
+  if (Array.isArray(copy.hashtags)) {
+    for (const tag of copy.hashtags) {
+      const w = String(tag || '').replace(/^#/, '').trim()
+      if (w) words.push(w)
+    }
+  }
+  const toks = normalizeTitles(body.competitorTitles).flatMap((t) => t.split(/\s+/)).map((s) => s.trim())
+  words.push(...toks)
+  return coverageDedup(words.filter((k) => k && !classifyExclusion(k).exclude && blacklistHits(k).length === 0))
 }
 
 function buildTitleUserText(body, competitors, mustInclude) {

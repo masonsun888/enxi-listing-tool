@@ -22,10 +22,12 @@ function checkWarnings(checks) {
   if (!checks) return []
   const warns = []
   if (checks.titleOver) warns.push(`標題 ${checks.titleLen} 字，超過蝦皮 60 字上限，貼上前要刪短`)
+  if (checks.titleShort) warns.push(`標題只有 ${checks.titleLen} 字，塞滿到 55–60 字才吃得到搜尋，建議再按一次`)
   if (checks.forbiddenHits && checks.forbiddenHits.length > 0)
     warns.push(`文案含禁字：${checks.forbiddenHits.join('、')}，請手動刪掉再貼`)
   if (checks.aftersaleOk === false) warns.push('售後三段格式跑掉了，建議再按一次重產')
   if (checks.keywordFirst === false) warns.push('主關鍵字沒有出現在標題最前面，建議再按一次重產')
+  if (checks.introKeywordFront === false) warns.push('內文前 30 字沒帶到主關鍵字，建議再按一次重產')
   return warns
 }
 
@@ -171,8 +173,8 @@ export default function NineCopyCard({ product, work, setWork, password, setBudg
           <div>
             <label className={labelCls}>
               蝦皮標題{' '}
-              <span className={`text-sm ${tLen > 60 ? 'font-bold text-rose-600' : 'text-slate-400'}`}>
-                {tLen}/60
+              <span className={`text-sm ${tLen > 60 || tLen < 55 ? 'font-bold text-rose-600' : 'text-slate-400'}`}>
+                {tLen}/60（塞滿式，建議 55–60）
               </span>
             </label>
             <textarea
