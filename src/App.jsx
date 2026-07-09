@@ -96,6 +96,9 @@ export default function App() {
       setProduct(makeDefaultProduct())
     if (next === 'nine' && pristine === JSON.stringify(makeDefaultProduct()))
       setProduct(makeNineDefaultProduct())
+    // 優化舊品＝白牌在售品：從經典的樂扣空白切過來時，換成白牌空白，才不會存成「樂扣」。
+    if (next === 'optimize' && pristine === JSON.stringify(makeDefaultProduct()))
+      setProduct(makeNineDefaultProduct())
     setMode(next)
     window.scrollTo({ top: 0 })
   }
