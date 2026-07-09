@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { makeDefaultProduct, makeEmptyWork, makeEmptyDone } from '../defaults.js'
+import { daysSince } from '../heroVariants.js'
 
 const KEY = 'enxi_saved_products'
+const BACKUP_KEY = 'enxi_last_backup'
+const BACKUP_REMIND_DAYS = 14
 const API = '/api/products'
 
 const STEPS = [
@@ -78,6 +81,7 @@ export default function SavedProducts({
   const [open, setOpen] = useState(false)
   const [flash, setFlash] = useState('')
   const [busy, setBusy] = useState(false)
+  const [lastBackup, setLastBackup] = useState(() => Number(localStorage.getItem(BACKUP_KEY)) || 0)
   const fileRef = useRef(null)
 
   useEffect(() => {
@@ -227,13 +231,21 @@ export default function SavedProducts({
   }
 
   function exportJSON() {
+    if (saved.length === 0) {
+      notify('還沒有商品可備份')
+      return
+    }
     const blob = new Blob([JSON.stringify(saved, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `enxi-products-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `恩希備份-${new Date().toISOString().slice(0, 10)}-${saved.length}筆.json`
     a.click()
     URL.revokeObjectURL(url)
+    const ts = Date.now()
+    localStorage.setItem(BACKUP_KEY, String(ts))
+    setLastBackup(ts)
+    notify(`💾 已備份 ${saved.length} 筆到電腦`)
   }
 
   async function importJSON(e) {
@@ -279,6 +291,31 @@ export default function SavedProducts({
           ＋ 新商品
         </button>
       </div>
+
+      {/* 顯眼備份：一鍵下載全部商品存電腦（雲端 KV 之外多一層本機防身）。 */}
+      {saved.length > 0 &&
+        (() => {
+          const d = lastBackup ? daysSince(lastBackup) : null
+          const stale = d === null || d > BACKUP_REMIND_DAYS
+          return (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={exportJSON}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-amber-300 bg-amber-50 py-3 text-base font-bold text-amber-800 active:scale-[0.98]"
+              >
+                💾 備份全部（下載存電腦，{saved.length} 筆）
+              </button>
+              <p className={`mt-1 text-center text-xs ${stale ? 'font-bold text-amber-700' : 'text-slate-400'}`}>
+                {d === null
+                  ? '⚠️ 還沒下載過備份——雲端萬一出事就沒了，建議先存一份'
+                  : stale
+                    ? `⚠️ 上次備份是 ${d} 天前，很久了，下載一份存電腦吧`
+                    : `上次備份：${d} 天前`}
+              </p>
+            </div>
+          )
+        })()}
 
       {flash && <p className="mt-2 text-center text-sm font-bold text-teal-700">{flash}</p>}
 

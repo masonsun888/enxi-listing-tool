@@ -617,8 +617,15 @@ export default function NinePage({ product, setProduct, work, setWork, password 
         disabled={missing.length > 0 || analyzing || overBudget}
         className="w-full rounded-2xl bg-teal-600 py-6 text-2xl font-extrabold text-white shadow-md transition active:scale-[0.98] disabled:bg-slate-300"
       >
-        {analyzing ? '🤖 AI 分析中…（約 10 秒）' : nine ? '🔁 重新分析（重產九張）' : '🚀 產生九張圖指令'}
+        {analyzing
+          ? '🤖 AI 分析中…（約 10 秒）'
+          : nine
+            ? '🔁 重新分析（重產九張・老闆再付一次錢 💸）'
+            : '🚀 首次分析（產生九張圖指令）'}
       </button>
+      <p className="mt-1 text-center text-xs text-slate-400">
+        按一次老闆掏一次錢（約 NT$0.5–1，含讀圖）💰 素材＋品名填好再按，一次到位
+      </p>
       {overBudget && (
         <p className="text-center text-sm font-bold text-rose-600">
           本月 AI 額度已用完，暫時無法分析（已存的九張指令照常可用）
@@ -803,39 +810,43 @@ export default function NinePage({ product, setProduct, work, setWork, password 
             🔥 主圖／規格圖最重要，值得多花力氣重生到滿意；🌊 中間幾張「充門面、能看即可」，別卡太久。
           </div>
 
-          {/* 九張卡片 */}
-          {built.cards.map((card, i) => (
-            <div key={card.slot} ref={(el) => (cardRefs.current[i] = el)}>
-              <NineCard
-                card={card}
-                done={!!doneArr[i]}
-                onToggleDone={() => toggleDone(i)}
-                isHero={card.slot === 1}
-                materialImage={materialImageFor(card)}
-                copiedBefore={!!copiedSlots[card.slot]}
-                onCopied={() => markCopied(card.slot, i)}
-              />
-            </div>
-          ))}
+          {/* 九張卡片（桌機 3×3 九宮格；手機維持單欄） */}
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {built.cards.map((card, i) => (
+              <div key={card.slot} ref={(el) => (cardRefs.current[i] = el)}>
+                <NineCard
+                  card={card}
+                  done={!!doneArr[i]}
+                  onToggleDone={() => toggleDone(i)}
+                  isHero={card.slot === 1}
+                  materialImage={materialImageFor(card)}
+                  copiedBefore={!!copiedSlots[card.slot]}
+                  onCopied={() => markCopied(card.slot, i)}
+                />
+              </div>
+            ))}
+          </div>
 
           {/* 選項圖卡片 */}
           {built.optionCards.length > 0 && (
             <>
               <h2 className="pt-2 text-lg font-bold text-slate-800">🎨 選項圖（每個顏色一張）</h2>
-              {built.optionCards.map((card) => {
-                const color = card.label.split('｜')[1]
-                return (
-                  <NineCard
-                    key={card.slot}
-                    card={card}
-                    done={!!(nine.optionDone && nine.optionDone[color])}
-                    onToggleDone={() => toggleOptionDone(color)}
-                    isHero={false}
-                    copiedBefore={!!copiedSlots[card.slot]}
-                    onCopied={() => markCopied(card.slot)}
-                  />
-                )
-              })}
+              <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {built.optionCards.map((card) => {
+                  const color = card.label.split('｜')[1]
+                  return (
+                    <NineCard
+                      key={card.slot}
+                      card={card}
+                      done={!!(nine.optionDone && nine.optionDone[color])}
+                      onToggleDone={() => toggleOptionDone(color)}
+                      isHero={false}
+                      copiedBefore={!!copiedSlots[card.slot]}
+                      onCopied={() => markCopied(card.slot)}
+                    />
+                  )
+                })}
+              </div>
             </>
           )}
 

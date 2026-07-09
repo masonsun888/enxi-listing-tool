@@ -150,8 +150,13 @@ export default function NineCopyCard({ product, work, setWork, password, setBudg
           disabled={!canRun}
           className="w-full rounded-2xl bg-slate-800 py-5 text-xl font-bold text-white shadow-md transition active:scale-[0.98] disabled:bg-slate-300"
         >
-          {loading ? '🤖 AI 寫文案中…（約 10 秒）' : r ? '🔁 重寫一版' : '📝 一鍵產上架文案'}
+          {loading
+            ? '🤖 AI 寫文案中…（約 10 秒）'
+            : r
+              ? '🔁 重新產一版（老闆再付一次錢 💸）'
+              : '📝 首次產上架文案（一鍵直接生成）'}
         </button>
+        <p className="mt-1 text-center text-xs text-slate-400">按一次老闆掏一次錢（約 NT$0.5）💰</p>
         {!product.name.trim() && (
           <p className="text-center text-sm font-bold text-slate-400">先在上面填品名</p>
         )}
