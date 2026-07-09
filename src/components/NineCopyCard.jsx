@@ -182,11 +182,14 @@ export default function NineCopyCard({ product, work, setWork, password, setBudg
                 {tLen}/60（塞滿式，建議 55–60）
               </span>
             </label>
+            <span className="mb-1.5 inline-block rounded-full bg-teal-100 px-2.5 py-0.5 text-xs font-bold text-teal-700">
+              📝 文字內容
+            </span>
             <textarea
               readOnly
               rows={2}
               value={r.shopee_title}
-              className="w-full resize-none rounded-xl border-2 border-slate-200 bg-slate-50 p-3 text-base text-slate-800 focus:outline-none"
+              className="w-full resize-none rounded-xl border-2 border-teal-200 bg-teal-50 p-3 text-base text-teal-900 focus:outline-none"
             />
             <button
               type="button"

@@ -65,7 +65,7 @@ function Card({ icon, title, subtitle, open, onToggle, disabled, children }) {
   )
 }
 
-export default function OptimizePage({ product, work, setWork, password, setBudget, overBudget }) {
+export default function OptimizePage({ product, setProduct, work, setWork, password, setBudget, overBudget }) {
   const opt = work.optimize || EMPTY
   const [openCard, setOpenCard] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -283,8 +283,38 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
   return (
     <div className="space-y-4">
       <div className="rounded-[12px] border border-line bg-surface px-5 py-3 text-sm font-semibold text-muted">
-        🔧 優化舊品：在售品局部補強。先在左側選一個已存商品（或新建填品名），再展開下面的卡。
+        🔧 優化舊品：在售品局部補強。先在左側選一個已存商品，或在下面填品名／貨號再展開各卡。
       </div>
+
+      {/* 商品資料：填了才能存檔、左側「💾 儲存此商品」才有東西可存 */}
+      <section className="rounded-[12px] border border-line bg-surface p-5 shadow-sm">
+        <h2 className="mb-3 text-base font-bold text-ink">📦 商品資料<span className="ml-2 text-xs font-normal text-muted">填品名才能存檔</span></h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-bold text-ink">商品貨號</label>
+            <input
+              type="text"
+              value={product.sku || ''}
+              onChange={(e) => setProduct((p) => ({ ...p, sku: e.target.value }))}
+              placeholder="例：ENX-0417"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-bold text-ink">品名</label>
+            <input
+              type="text"
+              value={product.name}
+              onChange={(e) => setProduct((p) => ({ ...p, name: e.target.value }))}
+              placeholder="例：316不鏽鋼保溫杯"
+              className={inputCls}
+            />
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          填好後按左側「💾 儲存此商品」即可存檔；優化結果也會自動存進這個商品。
+        </p>
+      </section>
 
       {/* 卡1：標題關鍵字優化 */}
       <Card
@@ -403,11 +433,14 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
                       {ok ? '✓ 全過' : '✕ 有問題'}
                     </span>
                   </div>
+                  <span className="mb-1 inline-block rounded-full bg-teal-100 px-2.5 py-0.5 text-xs font-bold text-teal-700">
+                    📝 文字內容
+                  </span>
                   <textarea
                     rows={2}
                     value={t}
                     onChange={(e) => editTitle(idx, e.target.value)}
-                    className="w-full resize-none rounded-[8px] border border-line bg-surface p-2.5 text-base text-ink focus:border-primary focus:outline-none"
+                    className="w-full resize-none rounded-[8px] border-2 border-teal-200 bg-teal-50 p-2.5 text-base text-teal-900 focus:border-teal-400 focus:outline-none"
                   />
                   {msgs.length > 0 && (
                     <ul className="mt-1.5 space-y-0.5">
@@ -527,11 +560,14 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
                       {ok ? '✓ 全過' : '✕ 有問題'}
                     </span>
                   </div>
+                  <span className="mb-1 inline-block rounded-full bg-teal-100 px-2.5 py-0.5 text-xs font-bold text-teal-700">
+                    📝 文字內容
+                  </span>
                   <textarea
                     rows={4}
                     value={t}
                     onChange={(e) => editIntro(iidx, e.target.value)}
-                    className="w-full resize-none rounded-[8px] border border-line bg-surface p-2.5 text-base text-ink focus:border-primary focus:outline-none"
+                    className="w-full resize-none rounded-[8px] border-2 border-teal-200 bg-teal-50 p-2.5 text-base text-teal-900 focus:border-teal-400 focus:outline-none"
                   />
                   {msgs.length > 0 && (
                     <ul className="mt-1.5 space-y-0.5">
@@ -623,22 +659,29 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
             <p className="text-sm font-bold text-ink">這張 Hero 的策略（勾一次，覺得怪再改）</p>
 
             <div>
-              <p className="mb-1 text-sm font-bold text-ink">主打賣點</p>
+              <p className="mb-1 text-sm font-bold text-ink">主打賣點<span className="ml-1 text-xs font-normal text-muted">勾一個，或自己打</span></p>
               <div className="flex flex-wrap gap-2">
                 {(heroAnalysis.copy.selling_points || []).map((sp, i) => (
                   <Chip
                     key={i}
                     label={sp.title}
-                    active={(heroChoices.sellingPointPick ?? 0) === i}
-                    onClick={() => updateHeroChoice({ sellingPointPick: i })}
+                    active={!(heroChoices.customSellingPoint || '').trim() && (heroChoices.sellingPointPick ?? 0) === i}
+                    onClick={() => updateHeroChoice({ sellingPointPick: i, customSellingPoint: '' })}
                   />
                 ))}
               </div>
+              <input
+                type="text"
+                value={heroChoices.customSellingPoint || ''}
+                onChange={(e) => updateHeroChoice({ customSellingPoint: e.target.value })}
+                placeholder="也可以自己打，例：一鍵開蓋不漏水"
+                className={`${inputCls} mt-2`}
+              />
             </div>
 
             <div>
               <p className="mb-1 text-sm font-bold text-ink">
-                主標題<span className="ml-1 text-xs font-normal text-muted">越短越有力</span>
+                主標題<span className="ml-1 text-xs font-normal text-muted">越短越有力，勾一個或自己打</span>
               </p>
               <div className="flex flex-wrap gap-2">
                 {(heroAnalysis.copy.main_title_options || []).map((t, i) => (
@@ -650,6 +693,13 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
                   />
                 ))}
               </div>
+              <input
+                type="text"
+                value={heroChoices.customMainTitle || ''}
+                onChange={(e) => updateHeroChoice({ customMainTitle: e.target.value })}
+                placeholder="也可以自己打，例：整箱不軟爛"
+                className={`${inputCls} mt-2`}
+              />
             </div>
 
             <div>
@@ -703,12 +753,14 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
 
             {/* Hero prompt */}
             <div className="rounded-[8px] border border-line p-3">
-              <p className="mb-1 text-sm font-bold text-ink">Hero 製圖指令（貼給 GPT）</p>
+              <span className="mb-1 inline-block rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-bold text-violet-700">
+                🎨 生圖指令（貼給 ChatGPT）
+              </span>
               <textarea
                 readOnly
                 rows={11}
                 value={heroCard.prompt}
-                className="w-full resize-none rounded-[8px] border border-line bg-bg/40 p-2.5 text-sm leading-relaxed text-ink focus:outline-none"
+                className="w-full resize-none rounded-[8px] border-2 border-violet-200 bg-violet-50 p-2.5 text-sm leading-relaxed text-violet-900 focus:outline-none"
               />
               <a
                 href="/assets/hero-ref-1.png"

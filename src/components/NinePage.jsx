@@ -657,19 +657,29 @@ export default function NinePage({ product, setProduct, work, setWork, password 
               <p className="mt-0.5 text-xs text-slate-400">已幫你預設選好，覺得怪再改即可。配色、排版、質感交給 GPT，你只挑「要主打什麼」。</p>
             </div>
 
-            {/* 主賣點（主） */}
-            <ChipRow
-              title="主打賣點"
-              hint="畫面要圍繞這件事"
-              options={(nine.analysis.copy.selling_points || []).map((sp) => sp.title)}
-              activeIdx={choices.sellingPointPick ?? 0}
-              onPick={(i) =>
-                updateChoice({
-                  sellingPointPick: i,
-                  ...(choices.secondarySellingPick === i ? { secondarySellingPick: undefined } : {}),
-                })
-              }
-            />
+            {/* 主賣點（主）：勾一個，或自己打 */}
+            <div>
+              <ChipRow
+                title="主打賣點"
+                hint="畫面要圍繞這件事（或到下方欄位自己打）"
+                options={(nine.analysis.copy.selling_points || []).map((sp) => sp.title)}
+                activeIdx={(choices.customSellingPoint || '').trim() ? -1 : choices.sellingPointPick ?? 0}
+                onPick={(i) =>
+                  updateChoice({
+                    sellingPointPick: i,
+                    customSellingPoint: '',
+                    ...(choices.secondarySellingPick === i ? { secondarySellingPick: undefined } : {}),
+                  })
+                }
+              />
+              <input
+                type="text"
+                value={choices.customSellingPoint || ''}
+                onChange={(e) => updateChoice({ customSellingPoint: e.target.value })}
+                placeholder="也可以自己打，例：一鍵開蓋不漏水"
+                className={`${inputCls} mt-2`}
+              />
+            </div>
 
             {/* 次要賣點（選填）：凸顯主次，主圖會補一句「◯◯ 是次要」 */}
             {(() => {

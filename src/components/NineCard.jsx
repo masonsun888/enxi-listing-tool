@@ -97,16 +97,16 @@ export default function NineCard({ card, done, onToggleDone, isHero, materialIma
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
-        className="mt-2 w-full rounded-xl bg-slate-50 px-3 py-2 text-left text-sm font-bold text-slate-600"
+        className="mt-2 w-full rounded-xl bg-violet-50 px-3 py-2 text-left text-sm font-bold text-violet-700"
       >
-        {expanded ? '▲ 收合指令' : '▼ 展開看指令內容'}
+        🎨 生圖指令（貼給 ChatGPT）　{expanded ? '▲ 收合' : '▼ 展開看內容'}
       </button>
       {expanded && (
         <textarea
           readOnly
           rows={10}
           value={card.prompt}
-          className="mt-2 w-full resize-none rounded-xl border-2 border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-800 focus:outline-none"
+          className="mt-2 w-full resize-none rounded-xl border-2 border-violet-200 bg-violet-50 p-3 text-sm leading-relaxed text-violet-900 focus:outline-none"
         />
       )}
 
