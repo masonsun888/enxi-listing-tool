@@ -620,8 +620,8 @@ export default function NinePage({ product, setProduct, work, setWork, password 
         {analyzing
           ? '🤖 AI 分析中…（約 10 秒）'
           : nine
-            ? '🔁 重新分析（老闆再付一次錢 💸）'
-            : '🚀 產生九張圖指令'}
+            ? '🔁 重新分析（重產九張・老闆再付一次錢 💸）'
+            : '🚀 首次分析（產生九張圖指令）'}
       </button>
       <p className="mt-1 text-center text-xs text-slate-400">
         按一次老闆掏一次錢（約 NT$0.5–1，含讀圖）💰 素材＋品名填好再按，一次到位
