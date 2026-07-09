@@ -1,5 +1,6 @@
 // 共用的空白商品（App 初始值與「新商品」皆用這個，避免重複定義）
 export const makeDefaultProduct = () => ({
+  sku: '', // 商品貨號：已存商品開頭顯示、可搜尋、溝通統一
   brand: '樂扣樂扣',
   name: '樂扣樂扣',
   size: '',
@@ -9,6 +10,7 @@ export const makeDefaultProduct = () => ({
 
 // 新品九圖模式的空白商品：固定白牌、品名留白給員工填。
 export const makeNineDefaultProduct = () => ({
+  sku: '',
   brand: '白牌',
   name: '',
   size: '',
@@ -40,6 +42,9 @@ export const makeEmptyWork = () => ({
   optimize: null,
   // 白牌定價卡的「你想賣」欄位（cost 沿用上面的 cost）
   nineSellPrice: '',
+  // 提示詞新發現：員工製圖/文案過程中試出有效的自訂提示詞或心得，跟著商品存，可匯出優化報告
+  // [{ kind: '圖'|'文案', text, at }]
+  discoveries: [],
 })
 
 // 進度勾選狀態

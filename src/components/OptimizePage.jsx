@@ -3,6 +3,7 @@ import { checkTitle, checkMessages, checkIntro, introMessages, TITLE_MAX } from 
 import { compressToJpeg, downloadDataUrl } from '../imageUtils.js'
 import { buildNine, TA_PRESETS, TONE_OPTIONS } from '../nineTemplates.js'
 import { setActiveVariant, daysSince, shouldRemindAB, statusLabel, VARIANT_STATUS } from '../heroVariants.js'
+import DiscoveryCard from './DiscoveryCard.jsx'
 
 // 優化舊品：給在售品局部補強。PR-A-fix：卡1 改成「單次 AI 直出 2–3 個完整標題」，
 // 選字規則全在後端，員工只做：貼競品 →（選填）填必埋詞 → 挑一個標題（可直接編輯）。
@@ -785,6 +786,9 @@ export default function OptimizePage({ product, work, setWork, password, setBudg
           </div>
         )}
       </Card>
+
+      {/* 💡 提示詞新發現 */}
+      <DiscoveryCard work={work} setWork={setWork} />
     </div>
   )
 }

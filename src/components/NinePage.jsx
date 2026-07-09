@@ -4,6 +4,7 @@ import { buildNine, TONE_OPTIONS, TA_PRESETS } from '../nineTemplates.js'
 import { compressToJpeg, downloadDataUrl } from '../imageUtils.js'
 import NineCard from './NineCard.jsx'
 import NineCopyCard from './NineCopyCard.jsx'
+import DiscoveryCard from './DiscoveryCard.jsx'
 
 const labelCls = 'mb-1 block text-base font-bold text-slate-700'
 const inputCls =
@@ -464,6 +465,16 @@ export default function NinePage({ product, setProduct, work, setWork, password 
         <h2 className="mb-3 text-lg font-bold text-slate-800">📦 商品資料</h2>
         <div className="space-y-4">
           <div>
+            <label className={labelCls}>商品貨號</label>
+            <input
+              type="text"
+              value={product.sku || ''}
+              onChange={(e) => setProductField('sku', e.target.value)}
+              placeholder="例：ENX-0417（找已存商品、溝通統一用）"
+              className={inputCls}
+            />
+          </div>
+          <div>
             <label className={labelCls}>品名</label>
             <input
               type="text"
@@ -866,6 +877,9 @@ export default function NinePage({ product, setProduct, work, setWork, password 
 
       {/* 💰 定價 */}
       <PricingCard work={work} setWorkField={setWorkField} innerRef={(el) => (secRefs.current.price = el)} />
+
+      {/* 💡 提示詞新發現 */}
+      <DiscoveryCard work={work} setWork={setWork} />
 
       <p className="pb-2 text-center text-sm text-slate-400">
         ☁️ 分析結果、文案和進度會自動存檔，之後從下方「已存商品」載入就能接著做。
