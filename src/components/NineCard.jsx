@@ -26,7 +26,13 @@ export default function NineCard({ card, done, onToggleDone, isHero, materialIma
   return (
     <div
       className={`rounded-2xl border-2 bg-white p-4 shadow-sm transition ${
-        done ? 'border-emerald-300 opacity-50' : 'border-slate-200'
+        done
+          ? 'border-emerald-300 opacity-50'
+          : card.tier === 'core'
+            ? 'border-rose-300' // 🔥 死磕（Hero／規格）
+            : card.tier === 'fill'
+              ? 'border-slate-200' // 🌊 放生
+              : 'border-amber-300' // ✅ 要對（比較／選項）
       }`}
     >
       <div className="flex items-start justify-between gap-2">
