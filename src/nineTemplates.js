@@ -105,8 +105,8 @@ function buildOptionPrompt(color) {
 }
 
 // buildNine(product, specs, analysis, choices?) → { cards: Card[8], optionCards: Card[N], tone }
-// choices = { sellingPointPick, secondarySellingPick, noSecondary, mainTitlePick, customMainTitle,
-//             taPick, keyActionPick, customKeyAction, toneOverride }
+// choices = { sellingPointPick, customSellingPoint, secondarySellingPick, noSecondary, mainTitlePick,
+//             customMainTitle, taPick, keyActionPick, customKeyAction, toneOverride }
 export function buildNine(product, specs, analysis, choices = {}) {
   const copy = analysis.copy || {}
   const picks = analysis.image_picks || {}
@@ -114,10 +114,14 @@ export function buildNine(product, specs, analysis, choices = {}) {
 
   const category = (analysis.product_analysis && analysis.product_analysis.category) || product.material || '商品'
 
-  // 主賣點（含主次）
+  // 主賣點（含主次）：員工可在勾選之外「自己打」，customSellingPoint 優先。
   const sp = Array.isArray(copy.selling_points) ? copy.selling_points : []
   const spIdx = Number.isInteger(choices.sellingPointPick) && sp[choices.sellingPointPick] ? choices.sellingPointPick : 0
-  const mainSellingPoint = (sp[spIdx] && sp[spIdx].title) || (sp[0] && sp[0].title) || '（主賣點）'
+  const mainSellingPoint =
+    String(choices.customSellingPoint || '').trim() ||
+    (sp[spIdx] && sp[spIdx].title) ||
+    (sp[0] && sp[0].title) ||
+    '（主賣點）'
 
   // 次要賣點：員工指定；未指定則預設抓下一個不同的賣點。可用 noSecondary 關掉。
   let secondary = ''

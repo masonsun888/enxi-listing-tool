@@ -182,6 +182,7 @@ export default function App() {
             {mode === 'optimize' && (
               <OptimizePage
                 product={product}
+                setProduct={setProduct}
                 work={work}
                 setWork={setWork}
                 password={password}

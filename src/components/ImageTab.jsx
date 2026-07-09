@@ -204,7 +204,7 @@ export default function ImageTab({ product, work, setWork }) {
         </p>
       )}
 
-      <ResultBox value={result} rows={12} />
+      <ResultBox value={result} rows={12} kind="image" />
     </div>
   )
 }
