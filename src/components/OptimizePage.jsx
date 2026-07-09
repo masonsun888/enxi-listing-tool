@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { BRANDS, MATERIALS } from '../prompts.js'
 import { checkTitle, checkMessages, checkIntro, introMessages, TITLE_MAX } from '../titleCheck.js'
 import { compressToJpeg, downloadDataUrl } from '../imageUtils.js'
 import { buildNine, TA_PRESETS, TONE_OPTIONS } from '../nineTemplates.js'
@@ -310,9 +311,37 @@ export default function OptimizePage({ product, setProduct, work, setWork, passw
               className={inputCls}
             />
           </div>
+          <div>
+            <label className="mb-1 block text-sm font-bold text-ink">品牌</label>
+            <select
+              value={product.brand}
+              onChange={(e) => setProduct((p) => ({ ...p, brand: e.target.value }))}
+              className={inputCls}
+            >
+              {BRANDS.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-bold text-ink">材質</label>
+            <select
+              value={product.material}
+              onChange={(e) => setProduct((p) => ({ ...p, material: e.target.value }))}
+              className={inputCls}
+            >
+              {MATERIALS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <p className="mt-2 text-xs text-muted">
-          填好後按左側「💾 儲存此商品」即可存檔；優化結果也會自動存進這個商品。
+          填好後按左側「💾 儲存此商品」即可存檔；優化結果也會自動存進這個商品。品牌／材質會顯示在已存清單，順手選對。
         </p>
       </section>
 
