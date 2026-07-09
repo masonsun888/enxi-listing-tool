@@ -7,6 +7,7 @@ import ImageTab from './components/ImageTab.jsx'
 import PriceTab from './components/PriceTab.jsx'
 import NinePage from './components/NinePage.jsx'
 import OptimizePage from './components/OptimizePage.jsx'
+import HomePage from './components/HomePage.jsx'
 import Footer from './components/Footer.jsx'
 import LockScreen from './components/LockScreen.jsx'
 import { makeDefaultProduct, makeNineDefaultProduct, makeEmptyWork } from './defaults.js'
@@ -19,6 +20,7 @@ const TABS = [
 ]
 
 const MODES = [
+  { key: 'home', label: '🏠 首頁' },
   { key: 'classic', label: '🗂 經典模式' },
   { key: 'optimize', label: '🔧 優化舊品' },
   { key: 'nine', label: '⚡ 新品九圖' },
@@ -45,8 +47,8 @@ function TopBudget({ budget }) {
 }
 
 export default function App() {
-  // 新品九圖為預設；優化舊品＝在售品局部補強；經典模式＝原有四分頁工作流（樂扣、珍珠照舊）。
-  const [mode, setMode] = useState('nine')
+  // 首頁／使用說明為預設；新品九圖＝全新一整套；優化舊品＝在售品局部補強；經典模式＝原有四分頁（樂扣、珍珠照舊）。
+  const [mode, setMode] = useState('home')
   const [product, setProduct] = useState(makeNineDefaultProduct)
   const [work, setWork] = useState(makeEmptyWork)
   const [currentId, setCurrentId] = useState(null)
@@ -119,7 +121,7 @@ export default function App() {
         <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
           <h1 className="text-lg font-bold text-primary">恩希上架工具</h1>
           <div className="order-3 w-full md:order-none md:w-auto">
-            <nav className="grid grid-cols-3 gap-1.5 md:flex">
+            <nav className="grid grid-cols-2 gap-1.5 md:flex">
               {MODES.map((m) => (
                 <button
                   key={m.key}
@@ -142,24 +144,32 @@ export default function App() {
         </div>
       </header>
 
-      {/* 主體：左側商品欄（桌機常駐）＋主工作區（≤960）。手機收成單欄、側欄移到下方。 */}
-      <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-4 py-4 md:flex-row md:items-start md:gap-6">
-        <aside className="order-2 md:order-1 md:sticky md:top-[68px] md:w-[260px] md:shrink-0">
-          <SavedProducts
-            product={product}
-            setProduct={setProduct}
-            work={work}
-            setWork={setWork}
-            currentId={currentId}
-            setCurrentId={setCurrentId}
-            password={password}
-            makeBlankProduct={blankForMode}
-          />
-        </aside>
+      {/* 首頁／使用說明：全寬、無側欄。 */}
+      {mode === 'home' && (
+        <div className="mx-auto max-w-[1000px] px-4 py-6">
+          <HomePage onPick={switchMode} />
+        </div>
+      )}
 
-        <main className="order-1 min-w-0 md:order-2 md:flex-1">
-          <div className="mx-auto max-w-[960px]">
-            {mode === 'nine' && (
+      {/* 主體：左側商品欄（桌機常駐）＋主工作區（≤960）。手機收成單欄、側欄移到下方。 */}
+      {mode !== 'home' && (
+        <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-4 py-4 md:flex-row md:items-start md:gap-6">
+          <aside className="order-2 md:order-1 md:sticky md:top-[68px] md:w-[260px] md:shrink-0">
+            <SavedProducts
+              product={product}
+              setProduct={setProduct}
+              work={work}
+              setWork={setWork}
+              currentId={currentId}
+              setCurrentId={setCurrentId}
+              password={password}
+              makeBlankProduct={blankForMode}
+            />
+          </aside>
+
+          <main className="order-1 min-w-0 md:order-2 md:flex-1">
+            <div className="mx-auto max-w-[960px]">
+              {mode === 'nine' && (
               <NinePage
                 product={product}
                 setProduct={setProduct}
@@ -211,10 +221,27 @@ export default function App() {
               </>
             )}
 
-            <Footer />
-          </div>
-        </main>
-      </div>
+              <Footer />
+            </div>
+          </main>
+        </div>
+      )}
+
+      {/* 版權／公司資訊：整頁最底，所有模式都顯示 */}
+      <footer className="mt-4 border-t border-line bg-surface">
+        <div className="mx-auto max-w-[1280px] px-4 py-6 text-center text-xs leading-relaxed text-muted">
+          <p className="font-bold text-ink">恩希貿易有限公司</p>
+          <p className="mt-1">統一編號 90362242｜高雄市苓雅區凱旋三路 615 號 1 樓</p>
+          <p className="mt-1">
+            電話 <a className="hover:text-primary" href="tel:07-7880807">07-7880807</a>
+            {' ｜ '}
+            <a className="hover:text-primary" href="mailto:dreamteaa22@gmail.com">
+              dreamteaa22@gmail.com
+            </a>
+          </p>
+          <p className="mt-2 text-[11px] text-muted/70">© 2026 恩希貿易有限公司・內部上架工具</p>
+        </div>
+      </footer>
     </div>
   )
 }
