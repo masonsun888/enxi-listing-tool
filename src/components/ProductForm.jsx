@@ -45,6 +45,17 @@ export default function ProductForm({ product, setProduct }) {
 
       <div className="space-y-4">
         <div>
+          <label className={labelCls}>商品貨號</label>
+          <input
+            type="text"
+            value={product.sku || ''}
+            onChange={(e) => update('sku', e.target.value)}
+            placeholder="例：ENX-0417（找已存商品、溝通統一用）"
+            className={inputCls}
+          />
+        </div>
+
+        <div>
           <label className={labelCls}>品牌</label>
           <select
             value={product.brand}

@@ -82,6 +82,7 @@ export default function SavedProducts({
   const [flash, setFlash] = useState('')
   const [busy, setBusy] = useState(false)
   const [lastBackup, setLastBackup] = useState(() => Number(localStorage.getItem(BACKUP_KEY)) || 0)
+  const [query, setQuery] = useState('')
   const fileRef = useRef(null)
 
   useEffect(() => {
@@ -139,6 +140,7 @@ export default function SavedProducts({
     const prev = saved.find((s) => s.id === currentId)
     const record = {
       id: currentId || undefined,
+      sku: product.sku || '',
       brand: product.brand,
       name: product.name,
       size: product.size,
@@ -171,7 +173,8 @@ export default function SavedProducts({
       ((o.titleResults && o.titleResults.length > 0) ||
         (o.competitorTitles || '').trim() ||
         (o.hero && o.hero.variants && o.hero.variants.length > 0))
-    if (!hasNine && !hasCopy && !hasOptimize) return
+    const hasDiscovery = work.discoveries && work.discoveries.length > 0
+    if (!hasNine && !hasCopy && !hasOptimize && !hasDiscovery) return
     if (!product.name.trim()) return
     clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(() => saveCurrent(true), 1500)
@@ -181,6 +184,7 @@ export default function SavedProducts({
 
   function loadItem(item) {
     setProduct({
+      sku: item.sku || '',
       brand: item.brand,
       name: item.name,
       size: item.size,
@@ -248,6 +252,41 @@ export default function SavedProducts({
     notify(`💾 已備份 ${saved.length} 筆到電腦`)
   }
 
+  // 匯出「提示詞新發現」優化報告（.md，可讀，給老闆當優化依據）。
+  function exportReport() {
+    const fmt = (ts) => {
+      if (!ts) return ''
+      const d = new Date(ts)
+      const p = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())}`
+    }
+    const withNotes = saved.filter((s) => s.work && Array.isArray(s.work.discoveries) && s.work.discoveries.length > 0)
+    if (withNotes.length === 0) {
+      notify('還沒有任何「提示詞新發現」可匯出')
+      return
+    }
+    const lines = [`# 恩希・提示詞優化報告（${fmt(Date.now())}）`, '']
+    let total = 0
+    for (const s of withNotes) {
+      const head = `${s.sku ? `【${s.sku}】` : ''}${s.name || '（無品名）'}`
+      lines.push(`## ${head}`)
+      for (const d of s.work.discoveries) {
+        total += 1
+        lines.push(`- [${d.kind}] ${d.text}${d.at ? `　（${fmt(d.at)}）` : ''}`)
+      }
+      lines.push('')
+    }
+    lines.push(`> 共 ${withNotes.length} 個商品、${total} 筆發現。`)
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `恩希優化報告-${new Date().toISOString().slice(0, 10)}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+    notify(`📤 已匯出 ${total} 筆發現`)
+  }
+
   async function importJSON(e) {
     const file = e.target.files && e.target.files[0]
     if (!file) return
@@ -271,6 +310,12 @@ export default function SavedProducts({
     }
     if (fileRef.current) fileRef.current.value = ''
   }
+
+  // 搜尋：貨號或品名（不分大小寫）即時過濾。
+  const q = query.trim().toLowerCase()
+  const filtered = q
+    ? saved.filter((s) => `${s.sku || ''} ${s.name || ''}`.toLowerCase().includes(q))
+    : saved
 
   return (
     <section className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
@@ -333,10 +378,10 @@ export default function SavedProducts({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={exportJSON}
+              onClick={exportReport}
               className="flex-1 rounded-lg border-2 border-slate-200 py-2 text-sm font-bold text-slate-600 active:scale-95"
             >
-              ⬇️ 匯出備份
+              📤 匯出優化報告
             </button>
             <button
               type="button"
@@ -354,6 +399,17 @@ export default function SavedProducts({
             />
           </div>
 
+          {/* 搜尋：貨號或品名 */}
+          {saved.length > 0 && (
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="🔍 搜尋貨號或品名"
+              className="w-full rounded-lg border-2 border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-teal-500 focus:outline-none"
+            />
+          )}
+
           {mode === 'loading' && (
             <p className="px-1 py-3 text-center text-sm text-slate-400">讀取中…</p>
           )}
@@ -362,7 +418,10 @@ export default function SavedProducts({
               還沒有存任何商品。填好資料後按「儲存此商品」。
             </p>
           )}
-          {saved.map((item) => (
+          {mode !== 'loading' && saved.length > 0 && filtered.length === 0 && (
+            <p className="px-1 py-3 text-center text-sm text-slate-400">找不到「{query}」，換個貨號或品名試試。</p>
+          )}
+          {filtered.map((item) => (
             <div
               key={item.id}
               className={`rounded-xl border-2 p-3 ${
@@ -373,6 +432,7 @@ export default function SavedProducts({
                 <div className="min-w-0">
                   <p className="truncate text-base font-bold text-slate-800">
                     {item.id === currentId && <span className="text-teal-600">● </span>}
+                    {item.sku && <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-500">{item.sku}</span>}
                     {item.name || '（無品名）'}
                   </p>
                   <p className="text-xs text-slate-400">

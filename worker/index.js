@@ -72,6 +72,7 @@ async function handleApi(request, env, url) {
       const id = body.id || crypto.randomUUID()
       const record = {
         id,
+        sku: body.sku || '',
         brand: body.brand || '',
         name: body.name || '',
         size: body.size || '',
